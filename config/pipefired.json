@@ -1,0 +1,31 @@
+{
+    "db": {
+        "user": "",
+        "host":"",
+        "password": "",
+        "database": ""
+    },
+    "sftp_connections": {
+        "ANZ": {
+            "host": "",
+            "key": "",
+            "name": "",
+            "password": "",
+            "key_password": ""
+        },
+        "windcave": {
+            "host": "",
+            "key": "",
+            "name": "",
+            "password": "",
+            "key_password": ""
+        },
+        "local": {
+            "host": "",
+            "key": "",
+            "name": "",
+            "password": "",
+            "key_password": ""
+        }
+    }
+}
