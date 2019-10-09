@@ -1,29 +1,30 @@
 {
-    "db": {
+    "database": {
         "user": "",
         "host":"",
         "password": "",
-        "database": ""
+        "database": "",
+        "timeout": ""
     },
     "sftp_connections": {
-        "ANZ": {
-            "host": "",
-            "key": "",
-            "name": "",
+        "connection1": {
+            "host": "localhost",
+            "key": "foo.pub",
+            "name": "user1",
             "password": "",
             "key_password": ""
         },
-        "windcave": {
-            "host": "",
-            "key": "",
-            "name": "",
+        "connection2": {
+            "host": "localhost",
+            "key": "foo.pub",
+            "name": "user2",
             "password": "",
             "key_password": ""
         },
-        "local": {
-            "host": "",
-            "key": "",
-            "name": "",
+        "connection3": {
+            "host": "localhost",
+            "key": "qux.pub",
+            "name": "user3",
             "password": "",
             "key_password": ""
         }

@@ -1,20 +1,22 @@
 package main
 
 import (
-	"fmt",
+	"fmt"
 	"github.com/sevlyar/go-daemon"
+	"github.com/masenocturnal/pipefire/internal/config"
 )
 
 func main() {
 
+	// do we need this with systemd ?
 	cntxt := &daemon.Context{
-		PidFileName: "sample.pid",
+		PidFileName: "pipefired.pid",
 		PidFilePerm: 0644,
-		LogFileName: "sample.log",
+		LogFileName: "pipefired.log",
 		LogFilePerm: 0640,
 		WorkDir:     "./",
 		Umask:       027,
-		Args:        []string{"[go-daemon sample]"},
+		Args:        []string{"[background false]"},
 	}
 
 	d, err := cntxt.Reborn()
