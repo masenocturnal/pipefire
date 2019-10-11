@@ -1,32 +1,29 @@
 {
+    "loglevel": "debug",
+    "background": "true",
     "database": {
-        "user": "",
-        "host":"",
-        "password": "",
-        "database": "",
+        "user": "asdf",
+        "host":"asdf",
+        "password": "asdf",
+        "database": "asd",
         "timeout": ""
     },
-    "sftp_connections": {
-        "connection1": {
-            "host": "localhost",
+    "sftp": {
+        "web01": {
+            "host": "",
             "key": "foo.pub",
-            "name": "user1",
+            "username": "user2",
             "password": "",
-            "key_password": ""
+            "key_password": "",
+            "port": 22
         },
         "connection2": {
-            "host": "localhost",
+            "host": "",
             "key": "foo.pub",
-            "name": "user2",
+            "username": "user1",
             "password": "",
-            "key_password": ""
-        },
-        "connection3": {
-            "host": "localhost",
-            "key": "qux.pub",
-            "name": "user3",
-            "password": "",
-            "key_password": ""
+            "key_password": "",
+            "port": 22
         }
     }
 }
