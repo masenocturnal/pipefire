@@ -35,66 +35,60 @@ type FileTransferConfirmation struct {
 	TransferredBytes int
 }
 
-// Connection is the accessible type for the sftp connection
-type Connection interface {
-	SendFile(string, string, string) (*FileTransferConfirmation, error)
-	SendDir(string, string, string) error
-}
-
-//Client is a
-type connection struct {
+type transport struct {
+	client *sftp.Client
 	Name   string
-	config map[string]Endpoint
 }
 
-//NewService create a new sftp service
-func NewService(connectionList map[string]Endpoint) Connection {
-
-	var conn connection = connection{}
-	conn.config = connectionList
-	return conn
+// Transport is the accessible type for the sftp connection
+type Transport interface {
+	SendFile(string, string) (*FileTransferConfirmation, error)
+	SendDir(string, string) error
+	ListRemoteDir(remoteDir string) error
+	Close()
 }
 
-func (c connection) getService(serviceID string) (*sftp.Client, error) {
+//NewConnection establish a connection
+func NewConnection(name string, conf Endpoint) (Transport, error) {
+	var transport transport
 
-	if conf, ok := c.config[serviceID]; ok {
-		// attempt to connect
-		connDetails := &ssh.ClientConfig{
-			User: conf.UserName,
-			Auth: []ssh.AuthMethod{
-				ssh.Password(conf.Password),
-			},
-			HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-			//HostKeyCallback: ssh.FixedHostKey(hostKey),
-		}
-
-		if conf.Port == "" {
-			log.Print("Port not set, using 22")
-			conf.Port = "22"
-		}
-		connectionString := conf.Host + ":" + conf.Port
-		log.Printf("Attempting to connect to %s", connectionString)
-		// connect
-		connection, err := ssh.Dial("tcp", connectionString, connDetails)
-		if err != nil {
-			return nil, err
-		}
-
-		// create new SFTP client
-		client, err := sftp.NewClient(connection)
-		if err != nil {
-			log.Fatal(err)
-			return nil, err
-		}
-		return client, err
+	// attempt to connect
+	connDetails := &ssh.ClientConfig{
+		User: conf.UserName,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(conf.Password),
+		},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		//HostKeyCallback: ssh.FixedHostKey(hostKey),
 	}
-	msg := fmt.Sprintf("Service ID: %s,  does not exist in the configuration", serviceID)
-	return nil, errors.New(msg)
+
+	if conf.Port == "" {
+		log.Print("Port not set, using 22")
+		conf.Port = "22"
+	}
+	connectionString := conf.Host + ":" + conf.Port
+	log.Printf("Attempting to connect to %s", connectionString)
+
+	// connect
+	connection, err := ssh.Dial("tcp", connectionString, connDetails)
+	if err != nil {
+		return nil, err
+	}
+
+	// create new SFTP client
+	client, err := sftp.NewClient(connection)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+	transport.client = client
+	transport.Name = name
+	return transport, err
 }
 
 // SendFile will transfer the srcPath to the destPath on the server defined by the serviceID
 // returns number of bytes transferred
-func (c connection) SendFile(srcPath string, destPath string, serviceID string) (*FileTransferConfirmation, error) {
+func (c transport) SendFile(srcPath string, destPath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 
 	// create a hash writer so that we can create a hash as we are
@@ -126,7 +120,7 @@ func (c connection) SendFile(srcPath string, destPath string, serviceID string) 
 	hashWriter.Reset()
 
 	// get the SFTP Client connectied to the destination server
-	client, err := c.getService(serviceID)
+	client := c.client
 	if err != nil {
 		return xfer, err
 	}
@@ -139,7 +133,7 @@ func (c connection) SendFile(srcPath string, destPath string, serviceID string) 
 		if p.IsDir() {
 			// write into the directory with file name
 			destPath = destPath + localFileInfo.Name()
-			fmt.Printf("Writing to remote server %s: %s", serviceID, destPath)
+			fmt.Printf("Writing to remote server %s: %s", c.Name, destPath)
 		} else {
 			// file exists already...replace ?
 			log.Print("Remote file already exists. Replacing")
@@ -172,12 +166,10 @@ func (c connection) SendFile(srcPath string, destPath string, serviceID string) 
 
 }
 
-func (c connection) ListRemoteDir(remoteDir string, serviceID string) error {
+func (c transport) ListRemoteDir(remoteDir string) error {
 	// get the SFTP Client connectied to the destination server
-	client, err := c.getService(serviceID)
-	if err != nil {
-		return err
-	}
+	client := c.client
+
 	// list the directory
 	w, err := client.ReadDir(remoteDir)
 	if err != nil {
@@ -189,7 +181,12 @@ func (c connection) ListRemoteDir(remoteDir string, serviceID string) error {
 	return err
 }
 
-func (c connection) SendDir(srcDir string, destDir string, serviceID string) error {
+func (c transport) SendDir(srcDir string, destDir string) error {
 
 	return errors.New("dummy")
+}
+
+//Close closes
+func (c transport) Close() {
+	c.client.Close()
 }

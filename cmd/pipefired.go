@@ -86,9 +86,15 @@ func executeFlow(conf *config.HostConfig) error {
 
 	contextLogger.Info("Starting Job")
 
-	sftp := sftp.NewService(conf.Sftp)
+	endPoint := conf.Sftp["web01"]
+	sftp, err := sftp.NewConnection("web01", endPoint)
+	if err != nil {
+		contextLogger.Error(err.Error())
+		return err
+	}
+	defer sftp.Close()
 
-	confirmation, err := sftp.SendFile("/home/andmas/cde_payload.txt", "/home/am/", "web01")
+	confirmation, err := sftp.SendFile("/home/andmas/cde_payload.txt", "/home/am/")
 	if err != nil {
 		contextLogger.Error(err.Error())
 		return err
