@@ -86,22 +86,31 @@ func executeFlow(conf *config.HostConfig) error {
 
 	contextLogger.Info("Starting Job")
 
-	endPoint := conf.Sftp["web01"]
-	sftp, err := sftp.NewConnection("web01", endPoint)
+	endPoint := conf.Sftp["connection2"]
+	sftp, err := sftp.NewConnection("connection2", endPoint)
 	if err != nil {
 		contextLogger.Error(err.Error())
 		return err
 	}
 	defer sftp.Close()
 
-	confirmation, err := sftp.SendFile("/home/andmas/cde_payload.txt", "/home/am/")
+	for i := 0; i <= 1000; i++ {
+		confirmation, err := sftp.SendFile("/home/andmas/cde_payload.txt", "/home/ubuntu/")
+		if err != nil {
+			result, _ := json.MarshalIndent(confirmation, "", " ")
+			fmt.Print(string(result))
+			log.Fatal(err.Error())
+		}
+		_ = confirmation
+	}
+
 	if err != nil {
 		contextLogger.Error(err.Error())
 		return err
 	}
-	result, _ := json.MarshalIndent(confirmation, "", " ")
+	//result, _ := json.MarshalIndent(confirmation, "", " ")
 
-	fmt.Print(string(result))
+	//fmt.Print(string(result))
 
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -36,8 +37,9 @@ type FileTransferConfirmation struct {
 }
 
 type transport struct {
-	client *sftp.Client
-	Name   string
+	client  *sftp.Client
+	session *ssh.Client
+	Name    string
 }
 
 // Transport is the accessible type for the sftp connection
@@ -52,37 +54,51 @@ type Transport interface {
 func NewConnection(name string, conf Endpoint) (Transport, error) {
 	var transport transport
 
+	keyAuth, err := getPrivateKeyAuthentication(conf.Key, conf.KeyPassword)
+	if err != nil {
+		return transport, err
+	}
+
 	// attempt to connect
 	connDetails := &ssh.ClientConfig{
 		User: conf.UserName,
 		Auth: []ssh.AuthMethod{
+			keyAuth,
 			ssh.Password(conf.Password),
 		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         3 * time.Second,
+		// max time to establish connection
 		//HostKeyCallback: ssh.FixedHostKey(hostKey),
 	}
+	connDetails.SetDefaults()
 
 	if conf.Port == "" {
-		log.Print("Port not set, using 22")
+		log.Println("Port not set, using 22")
 		conf.Port = "22"
 	}
 	connectionString := conf.Host + ":" + conf.Port
-	log.Printf("Attempting to connect to %s", connectionString)
+	log.Printf("Attempting to connect to %s \n", connectionString)
 
 	// connect
-	connection, err := ssh.Dial("tcp", connectionString, connDetails)
+	transport.session, err = ssh.Dial("tcp", connectionString, connDetails)
 	if err != nil {
 		return nil, err
 	}
 
+	go func() {
+		err := transport.session.Wait()
+		fmt.Println("Connection dropped")
+		fmt.Println(err.Error())
+	}()
+
 	// create new SFTP client
-	client, err := sftp.NewClient(connection)
+	transport.client, err = sftp.NewClient(transport.session)
 	if err != nil {
-		log.Fatal(err)
 		return nil, err
 	}
-	transport.client = client
 	transport.Name = name
+
 	return transport, err
 }
 
@@ -124,16 +140,19 @@ func (c transport) SendFile(srcPath string, destPath string) (*FileTransferConfi
 	if err != nil {
 		return xfer, err
 	}
-	defer client.Close()
 
 	// see if the remote file exists..
-	p, _ := client.Stat(destPath)
+	p, err := client.Stat(destPath)
+	if err != nil {
+		return xfer, fmt.Errorf("Can't stat %s : %s  ", destPath, err.Error())
+	}
+
 	if p != nil {
 		// lets see if it's a directory
 		if p.IsDir() {
 			// write into the directory with file name
 			destPath = destPath + localFileInfo.Name()
-			fmt.Printf("Writing to remote server %s: %s", c.Name, destPath)
+			fmt.Printf("Writing to remote server %s: %s \n", c.Name, destPath)
 		} else {
 			// file exists already...replace ?
 			log.Print("Remote file already exists. Replacing")
@@ -184,9 +203,20 @@ func (c transport) ListRemoteDir(remoteDir string) error {
 func (c transport) SendDir(srcDir string, destDir string) error {
 
 	return errors.New("dummy")
+
+}
+
+func (c transport) handleReconnects() {
+	closed := make(chan error, 1)
+	go func() {
+		closed <- c.session.Wait()
+	}()
+	fmt.Printf(" rar %v ", closed)
+	fmt.Println("IN HERE")
 }
 
 //Close closes
 func (c transport) Close() {
+	c.session.Close()
 	c.client.Close()
 }
