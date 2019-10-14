@@ -95,7 +95,7 @@ func executePipelines(conf *config.HostConfig) error {
 	defer sftp.Close()
 
 	// Get Remote Files
-	foo, err := sftp.GetFile("/home/ubuntu/test.tar.bz2", "/tmp/")
+	foo, err := sftp.GetFile("/home/am/positivessl.zip", "/tmp/")
 	if err != nil {
 		return err
 	}
@@ -122,9 +122,6 @@ func executePipelines(conf *config.HostConfig) error {
 		contextLogger.Error(err.Error())
 		return err
 	}
-	//result, _ := json.MarshalIndent(confirmation, "", " ")
-
-	//fmt.Print(string(result))
 
 	return nil
 }

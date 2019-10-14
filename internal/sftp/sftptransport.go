@@ -56,36 +56,47 @@ type Transport interface {
 func NewConnection(name string, conf Endpoint) (Transport, error) {
 	var transport transport
 
-	keyAuth, err := getPrivateKeyAuthentication(conf.Key, conf.KeyPassword)
-	if err != nil {
-		return transport, err
+	var authMethod []ssh.AuthMethod = make([]ssh.AuthMethod, 0)
+
+	if len(conf.Key) > 0 {
+		keyAuth, err := getPrivateKeyAuthentication(conf.Key, conf.KeyPassword)
+		if err != nil {
+			return transport, err
+		}
+		authMethod = append(authMethod, keyAuth)
+	}
+	if len(conf.Password) > 0 {
+		authMethod = append(authMethod, ssh.Password(conf.Password))
 	}
 
 	// attempt to connect
 	connDetails := &ssh.ClientConfig{
-		User: conf.UserName,
-		Auth: []ssh.AuthMethod{
-			keyAuth,
-			ssh.Password(conf.Password),
-		},
+		User:            conf.UserName,
+		Auth:            authMethod,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		// max time to establish connection
 		//HostKeyCallback: ssh.FixedHostKey(hostKey),
 	}
 	connDetails.SetDefaults()
 
+	// @todo validate config
+	if conf.Host == "" {
+		return transport, fmt.Errorf("Host has not been set for %s", name)
+	}
 	if conf.Port == "" {
 		log.Println("Port not set, using 22")
 		conf.Port = "22"
 	}
+
 	connectionString := conf.Host + ":" + conf.Port
 	log.Printf("Attempting to connect to %s \n", connectionString)
 
 	// connect
-	transport.Session, err = ssh.Dial("tcp", connectionString, connDetails)
+	sshClient, err := ssh.Dial("tcp", connectionString, connDetails)
 	if err != nil {
 		return nil, err
 	}
+	transport.Session = sshClient
 
 	go func() {
 		err := transport.Session.Wait()
@@ -103,7 +114,7 @@ func NewConnection(name string, conf Endpoint) (Transport, error) {
 	return transport, err
 }
 
-//GetFile Acquires a file from the remote service
+//	GetFile Acquires a file from the remote service
 func (c transport) GetFile(remotePath string, localPath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 
@@ -167,7 +178,90 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	}
 	xfer.LocalSize = localFileInfo.Size()
 
+	// read it back to hash the file
+	contents, _ := ioutil.ReadFile(localPath)
+
+	// we've used the hashWriter prevously so it needs to be reset
+	hashWriter.Reset()
+	hashWriter.Write(contents)
+	xfer.LocalHash = hex.EncodeToString(hashWriter.Sum(nil))
+
 	return xfer, err
+}
+
+func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *list.List, errorList *list.List) {
+	confirmationList = list.New()
+	errorList = list.New()
+
+	// it's cheap to check the localDir first
+	s, err := os.Stat(localDir)
+	if err != nil {
+		errorList.PushFront(err)
+		return
+	}
+
+	if !s.IsDir() {
+		errorList.PushFront(fmt.Errorf("Can't copy remote directory when localDir %s is not a directory", localDir))
+		return
+	}
+
+	r, err := c.Client.Stat(remoteDir)
+	if err != nil {
+		errorList.PushFront(err)
+		return
+	}
+
+	if !r.IsDir() {
+		// remote end is a file...but we have a local directory
+		// to stash it im, so let's just make it work
+		confirmation, err := c.GetFile(remoteDir, localDir)
+		if err != nil {
+			errorList.PushFront(err)
+		}
+		confirmationList.PushFront(confirmation)
+		// we should probably bail here as it's not a directory
+		return
+	}
+
+	// try and make the directory if it doesn't exist
+	err = os.MkdirAll(localDir, r.Mode())
+	if err != nil {
+		errorList.PushFront(err)
+		return
+	}
+
+	// loop through the directory
+	// and get all files and directories
+	filesInDir, err := c.Client.ReadDir(remoteDir)
+	if err != nil {
+		errorList.PushFront(err)
+		return
+	}
+
+	// only read it there is something to read
+	if len(filesInDir) > 0 {
+		// loop throught the files
+		for _, file := range filesInDir {
+			currentRemoteFilePath := filepath.Join(remoteDir, file.Name())
+
+			if file.IsDir() {
+				confirmations, errList := c.GetDir(currentRemoteFilePath, filepath.Join(localDir, file.Name()))
+				if err != nil {
+					errorList.PushFrontList(errList)
+				}
+
+				confirmationList.PushFrontList(confirmations)
+			} else {
+				confirmation, err := c.GetFile(currentRemoteFilePath, localDir)
+				if err != nil {
+					errorList.PushFront(err)
+				}
+				confirmationList.PushFront(confirmation)
+			}
+		}
+	}
+
+	return confirmationList, errorList
 }
 
 // SendFile will transfer the srcPath to the destPath on the server defined by the serviceID
@@ -285,8 +379,11 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	}
 
 	if !localDir.IsDir() {
-		errorList.PushFront(fmt.Errorf("The path %s is not a directory", srcDir))
-		return
+		confirmation, err := c.SendFile(srcDir, destDir)
+		if err != nil {
+			errorList.PushFront(err)
+		}
+		confirmationList.PushFront(confirmation)
 	}
 
 	filesInDir, err := ioutil.ReadDir(srcDir)
@@ -302,8 +399,9 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 		return
 	}
 
+	// only read it there is something to read
 	if len(filesInDir) > 0 {
-		// read the dir
+		// loop throught the files
 		for _, file := range filesInDir {
 			currentFilePath := filepath.Join(srcDir, file.Name())
 
@@ -320,10 +418,6 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 					errorList.PushFront(err)
 				}
 				confirmationList.PushFront(confirmation)
-			}
-
-			if err != nil {
-				fmt.Println(err.Error())
 			}
 		}
 	}
