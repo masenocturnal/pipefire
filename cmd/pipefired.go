@@ -50,7 +50,7 @@ func main() {
 		}
 	}
 	initLogging(conf.LogLevel)
-	err = executeFlow(conf)
+	err = executePipelines(conf)
 	if err != nil {
 		log.Error(err.Error())
 	} else {
@@ -77,7 +77,7 @@ func initLogging(lvl string) {
 	}
 }
 
-func executeFlow(conf *config.HostConfig) error {
+func executePipelines(conf *config.HostConfig) error {
 	// A common pattern is to re-use fields between logging statements by re-using
 	// the logrus.Entry returned from WithFields()
 	contextLogger := log.WithFields(log.Fields{
@@ -86,22 +86,36 @@ func executeFlow(conf *config.HostConfig) error {
 
 	contextLogger.Info("Starting Job")
 
-	endPoint := conf.Sftp["connection2"]
-	sftp, err := sftp.NewConnection("connection2", endPoint)
+	endPoint := conf.Sftp["connection1"]
+	sftp, err := sftp.NewConnection("connection1", endPoint)
 	if err != nil {
 		contextLogger.Error(err.Error())
 		return err
 	}
 	defer sftp.Close()
 
-	for i := 0; i <= 1000; i++ {
-		confirmation, err := sftp.SendFile("/home/andmas/cde_payload.txt", "/home/ubuntu/")
-		if err != nil {
-			result, _ := json.MarshalIndent(confirmation, "", " ")
-			fmt.Print(string(result))
-			log.Fatal(err.Error())
+	// Get Remote Files
+	foo, err := sftp.GetFile("/home/ubuntu/test.tar.bz2", "/tmp/")
+	if err != nil {
+		return err
+	}
+
+	result, _ := json.MarshalIndent(foo, "", " ")
+	fmt.Println(string(result))
+
+	confirmations, errors := sftp.SendDir("/home/andmas/tmp/RefundFiles", "/home/ubuntu/tmp")
+	if errors != nil {
+		// show all errors
+		for temp := errors.Front(); temp != nil; temp = temp.Next() {
+			fmt.Println(temp.Value)
 		}
-		_ = confirmation
+	}
+
+	// show success
+	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
+		result, _ := json.MarshalIndent(temp.Value, "", " ")
+		fmt.Println(string(result))
+
 	}
 
 	if err != nil {
