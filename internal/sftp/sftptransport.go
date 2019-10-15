@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/pkg/sftp"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -41,6 +41,7 @@ type transport struct {
 	Client  *sftp.Client
 	Session *ssh.Client
 	Name    string
+	log     *log.Entry
 }
 
 // Transport is the accessible type for the sftp connection
@@ -49,11 +50,15 @@ type Transport interface {
 	SendDir(string, string) (*list.List, *list.List)
 	ListRemoteDir(remoteDir string) error
 	GetFile(string, string) (*FileTransferConfirmation, error)
+	GetDir(string, string) (*list.List, *list.List)
+	CleanDir(string) error
+	RemoveDir(string) error
+	RemoveFile(string) error
 	Close()
 }
 
 //NewConnection establish a connection
-func NewConnection(name string, conf Endpoint) (Transport, error) {
+func NewConnection(name string, conf Endpoint, correlationID string) (Transport, error) {
 	var transport transport
 
 	var authMethod []ssh.AuthMethod = make([]ssh.AuthMethod, 0)
@@ -89,7 +94,7 @@ func NewConnection(name string, conf Endpoint) (Transport, error) {
 	}
 
 	connectionString := conf.Host + ":" + conf.Port
-	log.Printf("Attempting to connect to %s \n", connectionString)
+	log.Infof("Attempting to connect to %s ", connectionString)
 
 	// connect
 	sshClient, err := ssh.Dial("tcp", connectionString, connDetails)
@@ -100,8 +105,8 @@ func NewConnection(name string, conf Endpoint) (Transport, error) {
 
 	go func() {
 		err := transport.Session.Wait()
-		fmt.Println("Connection dropped")
-		fmt.Println(err.Error())
+		log.Info("Connection Closed")
+		log.Error(err.Error())
 	}()
 
 	// create new SFTP client
@@ -109,15 +114,75 @@ func NewConnection(name string, conf Endpoint) (Transport, error) {
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("Connnected to %s \n", connectionString)
 	transport.Name = name
+	transport.log = log.WithField("correlationId", correlationID)
 
 	return transport, err
+}
+
+//CleanDir will recursively iterate through the directories
+//and remove any files in them leaving the directory structure in place
+func (c transport) CleanDir(remoteDir string) error {
+	log := c.log.WithField("Remote Directory", remoteDir)
+	log.Infof("Attempting to clean remote directory: %s", remoteDir)
+
+	// loop through the directory
+	// and get all files and directories
+	if _, err := c.Client.ReadDir(remoteDir); err != nil {
+		return err
+	}
+
+	// loop through the directory
+	// and get all files and directories
+	filesInDir, err := c.Client.ReadDir(remoteDir)
+	if err != nil {
+		return err
+	}
+	var lastError error
+	// only read it there is something to read
+	if len(filesInDir) > 0 {
+		// loop throught the files
+		for _, file := range filesInDir {
+			currentRemoteFilePath := filepath.Join(remoteDir, file.Name())
+
+			if file.IsDir() {
+				lastError = c.CleanDir(currentRemoteFilePath)
+
+			} else {
+				lastError = c.RemoveFile(currentRemoteFilePath)
+			}
+		}
+	}
+	if lastError == nil {
+		log.Info("Completed")
+	}
+	return lastError
+}
+
+//RemoveDir wrapper arround the underlying SFTP Client RemoveDir function
+func (c transport) RemoveDir(remoteDir string) error {
+	err := c.Client.RemoveDirectory(remoteDir)
+	if err == nil {
+		c.log.Printf("Removed")
+	}
+	return err
+}
+
+//RemoveFile wrapper arround the underlying SFTP Client Remove function
+func (c transport) RemoveFile(remoteFile string) error {
+	c.log.Infof("Attempting to delete file %s@%s: ", remoteFile, c.Name)
+	err := c.Client.Remove(remoteFile)
+	if err == nil {
+		c.log.Info("Removed")
+	}
+	return err
 }
 
 //	GetFile Acquires a file from the remote service
 func (c transport) GetFile(remotePath string, localPath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
-
+	c.log.Infof("Attempting to get: %s@%s to %s@local: ", remotePath, c.Name, localPath)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
@@ -130,14 +195,19 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	}
 
 	// check the remote file
-	remoteFile, err := c.Client.Stat(remotePath)
+	remoteFile, err := c.Client.Lstat(remotePath)
 	if err != nil {
 		return xfer, err
 	}
-
 	if remoteFile.IsDir() {
 		return xfer, fmt.Errorf("Remote  file %s is a directory, call GetDir()", remotePath)
 	}
+
+	// ignore symlinks for now
+	if remoteFile.Mode()&os.ModeSymlink != 0 {
+		return nil, err
+	}
+
 	xfer.RemoteFileName = remotePath
 	xfer.RemoteSize = remoteFile.Size()
 
@@ -186,6 +256,7 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	hashWriter.Write(contents)
 	xfer.LocalHash = hex.EncodeToString(hashWriter.Sum(nil))
 
+	c.log.Infof("Transferred \n")
 	return xfer, err
 }
 
@@ -193,15 +264,10 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 	confirmationList = list.New()
 	errorList = list.New()
 
-	// it's cheap to check the localDir first
-	s, err := os.Stat(localDir)
+	c.log.Infof("Attempting to GetDir %s to %s ", remoteDir, localDir)
+	err := os.MkdirAll(localDir, 0700)
 	if err != nil {
 		errorList.PushFront(err)
-		return
-	}
-
-	if !s.IsDir() {
-		errorList.PushFront(fmt.Errorf("Can't copy remote directory when localDir %s is not a directory", localDir))
 		return
 	}
 
@@ -222,6 +288,10 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 		// we should probably bail here as it's not a directory
 		return
 	}
+
+	// remotePath is a directory, so is the localPath
+	// create the remote directory name within the local path
+	localDir = filepath.Join(localDir, r.Name())
 
 	// try and make the directory if it doesn't exist
 	err = os.MkdirAll(localDir, r.Mode())
@@ -251,6 +321,9 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 				}
 
 				confirmationList.PushFrontList(confirmations)
+			} else if file.Mode()&os.ModeSymlink != 0 {
+				// ignore symlinks
+				continue
 			} else {
 				confirmation, err := c.GetFile(currentRemoteFilePath, localDir)
 				if err != nil {
@@ -269,6 +342,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 func (c transport) SendFile(localPath string, remotePath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 
+	c.log.Infof("Attempting to send: %s to %s@%s: ", localPath, remotePath, c.Name)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
@@ -314,10 +388,10 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 		if p.IsDir() {
 			// write into the directory with file name
 			remotePath = remotePath + localFileInfo.Name()
-			fmt.Printf("Writing to remote server %s: %s \n", c.Name, remotePath)
+			c.log.Infof("Writing to remote server %s: %s \n", c.Name, remotePath)
 		} else {
 			// file exists already...replace ?
-			log.Print("Remote file already exists. Replacing")
+			c.log.Info("Remote file already exists. Replacing")
 		}
 	}
 
@@ -339,11 +413,11 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	// file handle has closed
 	remoteFileInfo, err := client.Stat(remotePath)
 	if err != nil {
-		log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
+		c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
 	} else {
 		xfer.RemoteSize = remoteFileInfo.Size()
 	}
-
+	c.log.Info("Transferred")
 	return xfer, err
 }
 
@@ -410,7 +484,6 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 				if err != nil {
 					errorList.PushFrontList(errList)
 				}
-
 				confirmationList.PushFrontList(confirmations)
 			} else {
 				confirmation, err := c.SendFile(currentFilePath, destDir)
@@ -429,12 +502,13 @@ func (c transport) handleReconnects() {
 	go func() {
 		closed <- c.Session.Wait()
 	}()
-	fmt.Printf("Here %v ", closed)
-	fmt.Println("IN HERE")
+	c.log.Printf("Here %v ", closed)
+	c.log.Println("IN HERE")
 }
 
 //Close closes
 func (c transport) Close() {
-	c.Session.Close()
 	c.Client.Close()
+	c.Session.Close()
+
 }

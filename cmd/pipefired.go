@@ -50,16 +50,19 @@ func main() {
 		}
 	}
 	initLogging(conf.LogLevel)
+
+	log.Info("Starting Pipeline")
 	err = executePipelines(conf)
 	if err != nil {
 		log.Error(err.Error())
 	} else {
-		log.Print("Flow done")
+		log.Info("Pipeline Done")
 	}
 }
 
 func initLogging(lvl string) {
-	log.SetFormatter(&log.JSONFormatter{})
+	//log.SetFormatter(&log.JSONFormatter{})
+	log.SetFormatter(&log.TextFormatter{})
 	log.SetOutput(os.Stdout)
 
 	lvl = strings.ToLower(lvl)
@@ -78,32 +81,31 @@ func initLogging(lvl string) {
 }
 
 func executePipelines(conf *config.HostConfig) error {
+	correlationID := uuid.New().String()
 	// A common pattern is to re-use fields between logging statements by re-using
 	// the logrus.Entry returned from WithFields()
 	contextLogger := log.WithFields(log.Fields{
-		"correlationId": uuid.New().String(),
+		"correlationId": correlationID,
 	})
 
-	contextLogger.Info("Starting Job")
+	contextLogger.Info("Starting Pipeline")
 
 	endPoint := conf.Sftp["connection1"]
-	sftp, err := sftp.NewConnection("connection1", endPoint)
+	sftp, err := sftp.NewConnection("connection1", endPoint, correlationID)
 	if err != nil {
 		contextLogger.Error(err.Error())
 		return err
 	}
 	defer sftp.Close()
 
-	// Get Remote Files
-	foo, err := sftp.GetFile("/home/am/positivessl.zip", "/tmp/")
-	if err != nil {
-		return err
-	}
+	// // Get Remote File
+	// foo, err := sftp.GetFile("/home/am/positivessl.zip", "/tmp/")
+	// if err != nil {
+	// 	return err
+	// }
 
-	result, _ := json.MarshalIndent(foo, "", " ")
-	fmt.Println(string(result))
-
-	confirmations, errors := sftp.SendDir("/home/andmas/tmp/RefundFiles", "/home/ubuntu/tmp")
+	// Get Remote Dir
+	status, errors := sftp.GetDir("/home/am/nocturnal.net.au", "/tmp/foobar")
 	if errors != nil {
 		// show all errors
 		for temp := errors.Front(); temp != nil; temp = temp.Next() {
@@ -111,17 +113,35 @@ func executePipelines(conf *config.HostConfig) error {
 		}
 	}
 
-	// show success
-	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
+	if errors.Len() == 0 {
+		if err := sftp.CleanDir("/home/am/nocturnal.net.au"); err != nil {
+			contextLogger.Error(err.Error())
+			return err
+		}
+	}
+
+	// result, _ := json.MarshalIndent(foo, "", " ")
+	// fmt.Println(string(result))
+
+	// confirmations, errors := sftp.SendDir("/home/andmas/tmp/RefundFiles", "/home/ubuntu/tmp")
+	// if errors != nil {
+	// 	// show all errors
+	// 	for temp := errors.Front(); temp != nil; temp = temp.Next() {
+	// 		fmt.Println(temp.Value)
+	// 	}
+	// }
+
+	// // show success
+	// @todo loop recursive
+	for temp := status.Front(); temp != nil; temp = temp.Next() {
 		result, _ := json.MarshalIndent(temp.Value, "", " ")
-		fmt.Println(string(result))
-
+		log.Debug(string(result))
 	}
 
-	if err != nil {
-		contextLogger.Error(err.Error())
-		return err
-	}
+	// if err != nil {
+	// 	contextLogger.Error(err.Error())
+	// 	return err
+	// }
 
 	return nil
 }
