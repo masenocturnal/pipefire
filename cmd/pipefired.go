@@ -9,9 +9,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/internal/sftp"
+	"github.com/masenocturnal/pipefire/internal/crypto"
 	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"golang.org/x/crypto/openpgp"
 )
 
 func main() {
@@ -80,6 +82,35 @@ func initLogging(lvl string) {
 	}
 }
 
+func encryptPipeline() {
+	var pubKey string
+	log.Println("Public key:", pubKey)
+
+	provider := 
+
+	// Read in public key
+	recipient, err := KeyFromFile(pubKey)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	f, err := os.Open(fileToEnc)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer f.Close()
+
+	dst, err := os.Create(fileToEnc + ".gpg")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer dst.Close()
+	encrypt([]*openpgp.Entity{recipient}, nil, f, dst)
+}
+
 func executePipelines(conf *config.HostConfig) error {
 	correlationID := uuid.New().String()
 	// A common pattern is to re-use fields between logging statements by re-using
@@ -133,6 +164,7 @@ func executePipelines(conf *config.HostConfig) error {
 
 	// // show success
 	// @todo loop recursive
+
 	for temp := status.Front(); temp != nil; temp = temp.Next() {
 		result, _ := json.MarshalIndent(temp.Value, "", " ")
 		log.Debug(string(result))
