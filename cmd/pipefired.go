@@ -8,12 +8,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
-	"github.com/masenocturnal/pipefire/internal/sftp"
 	"github.com/masenocturnal/pipefire/internal/crypto"
+	"github.com/masenocturnal/pipefire/internal/sftp"
 	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"golang.org/x/crypto/openpgp"
 )
 
 func main() {
@@ -40,8 +39,8 @@ func main() {
 
 	log.Print("- - - - - - - - - - - - - - -")
 	log.Print("daemon started")
-	conf, err := config.ReadApplicationConfig("pipefired")
-	_ = conf
+	hostConfig, err := config.ReadApplicationConfig("pipefired")
+
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
@@ -51,15 +50,16 @@ func main() {
 			log.Print("Encountered error: " + err.Error())
 		}
 	}
-	initLogging(conf.LogLevel)
+	initLogging(hostConfig.LogLevel)
 
 	log.Info("Starting Pipeline")
-	err = executePipelines(conf)
-	if err != nil {
-		log.Error(err.Error())
-	} else {
-		log.Info("Pipeline Done")
-	}
+	err = directDebitPipeline(hostConfig)
+	// err = executePipelines(conf)
+	// if err != nil {
+	// 	log.Error(err.Error())
+	// } else {
+	// 	log.Info("Pipeline Done")
+	// }
 }
 
 func initLogging(lvl string) {
@@ -82,51 +82,81 @@ func initLogging(lvl string) {
 	}
 }
 
-func encryptPipeline() {
-	var pubKey string
-	log.Println("Public key:", pubKey)
-
-	provider := 
-
-	// Read in public key
-	recipient, err := KeyFromFile(pubKey)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	f, err := os.Open(fileToEnc)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer f.Close()
-
-	dst, err := os.Create(fileToEnc + ".gpg")
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	defer dst.Close()
-	encrypt([]*openpgp.Entity{recipient}, nil, f, dst)
-}
-
-func executePipelines(conf *config.HostConfig) error {
+func directDebitPipeline(hostConfig *config.HostConfig) (err error) {
 	correlationID := uuid.New().String()
+
 	// A common pattern is to re-use fields between logging statements by re-using
 	// the logrus.Entry returned from WithFields()
 	contextLogger := log.WithFields(log.Fields{
 		"correlationId": correlationID,
 	})
-
 	contextLogger.Info("Starting Pipeline")
 
-	endPoint := conf.Sftp["connection1"]
-	sftp, err := sftp.NewConnection("connection1", endPoint, correlationID)
-	if err != nil {
-		contextLogger.Error(err.Error())
-		return err
+	/*
+		connection1Endpoint := hostConfig.Sftp["connection1"]
+		if err = sftpFromTask(connection1Endpoint, correlationID); err != nil {
+			return
+		}
+	*/
+
+	encryptForANZ := hostConfig.Crypto["encryptforanz"]
+	if err = encryptTask(encryptForANZ, correlationID); err != nil {
+		return
 	}
+	/*
+		connection2Endpoint := hostConfig.Sftp["connection2"]
+		if err = sftpToTask(connection2Endpoint, correlationID); err != nil {
+			return
+		}
+
+		connection3Endpoint := hostConfig.Sftp["connection3"]
+		if err = sftpToTask(connection3Endpoint, correlationID); err != nil {
+			return
+		}
+	*/
+	return
+}
+
+func encryptTask(config crypto.ProviderConfig, correlationID string) (err error) {
+	// Get Provider
+	provider := crypto.NewProvider(config, correlationID)
+
+	fileName := "/tmp/Pickup/GA/DD_AU_BankANZ_Book_12_191016.012117.484.csv"
+
+	err = provider.EncryptFile(fileName, fileName+".gpg")
+	if err != nil {
+		return
+	}
+
+	// f, err := os.Open(fileToEnc)
+	// if err != nil {
+	// 	return
+	// }
+	// defer f.Close()
+
+	// dst, err := os.Create(fileToEnc + ".gpg")
+	// if err != nil {
+	// 	return
+	// }
+	// defer dst.Close()
+	// encrypt([]*openpgp.Entity{recipient}, nil, f, dst)
+	return err
+}
+
+// get files from a particular endpoint
+func sftpFromTask(conf sftp.Endpoint, correlationID string) error {
+
+	return fmt.Errorf("foo")
+}
+
+// send files to a particular endpoint
+func sftpToTask(conf sftp.Endpoint, correlationID string) (err error) {
+
+	sftp, err := sftp.NewConnection("connection1", conf, correlationID)
+	if err != nil {
+		return
+	}
+
 	defer sftp.Close()
 
 	// // Get Remote File
@@ -146,7 +176,6 @@ func executePipelines(conf *config.HostConfig) error {
 
 	if errors.Len() == 0 {
 		if err := sftp.CleanDir("/home/am/nocturnal.net.au"); err != nil {
-			contextLogger.Error(err.Error())
 			return err
 		}
 	}

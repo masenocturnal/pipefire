@@ -9,31 +9,38 @@
         "timeout": ""
     },
     "sftp": {
-        "web01": {
-            "host": "",
-            "key": "foo.pub",
-            "username": "user2",
+        "connection1": {
+            "host": "fxladl.com.au",
+            "key": "/home/andmas/.ssh/certegy-sam.pem",
+            "username": "ubuntu",
             "password": "",
             "key_password": "",
             "port": 22
         },
         "connection2": {
-            "host": "",
-            "key": "foo.pub",
-            "username": "user1",
+            "host": "fxladl.com.au",
+            "key": "/home/andmas/.ssh/certegy-sam.pem",
+            "username": "ubuntu",
+            "password": "",
+            "key_password": "",
+            "port": 22
+        },
+        "connection3": {
+            "host": "fxladl.com.au",
+            "key": "/home/andmas/.ssh/certegy-sam.pem",
+            "username": "ubuntu",
             "password": "",
             "key_password": "",
             "port": 22
         }
     },
     "crypto": {
-        "bank1Send": {
-            "publicKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-pub.asc",
-            "fingerPrint": "2938C566341C930C51F36B0620F99C421B73A0B3"            
-        },
-        "bank1Receive": {
-            "privateKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-priv.asc",
-            "fingerprint": "2938C566341C930C51F36B0620F99C421B73A0B3"
+        "encryptforanz": {
+            "encryptionKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-pub.asc",
+            "fingerprint": "2938C566341C930C51F36B0620F99C421B73A0B3",
+            "signingKey": "",
+            "keyPassword": "",
+            "decryptionKey": ""
         }
     }
 }

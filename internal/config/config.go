@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/masenocturnal/pipefire/internal/crypto"
 	"github.com/masenocturnal/pipefire/internal/sftp"
 	"github.com/spf13/viper"
 )
@@ -17,10 +18,11 @@ type DbConnection struct {
 
 // HostConfig data structure that represent a valid configuration file
 type HostConfig struct {
-	LogLevel   string                   `json:"loglevel"`
-	Background bool                     `json:"background"`
-	Database   DbConnection             `json:"database"`
-	Sftp       map[string]sftp.Endpoint `json:"sftp"`
+	LogLevel   string                           `json:"loglevel"`
+	Background bool                             `json:"background"`
+	Database   DbConnection                     `json:"database"`
+	Sftp       map[string]sftp.Endpoint         `json:"sftp"`
+	Crypto     map[string]crypto.ProviderConfig `json:"crypto"`
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
