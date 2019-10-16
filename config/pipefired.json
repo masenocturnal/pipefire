@@ -38,9 +38,15 @@
         "encryptforanz": {
             "encryptionKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-pub.asc",
             "fingerprint": "2938C566341C930C51F36B0620F99C421B73A0B3",
-            "signingKey": "",
-            "keyPassword": "",
+            "signingKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/private-signing-key.asc",
+            "signingKeyPassword": "foobar123",
+            "encryptionKeyPassword": "",
             "decryptionKey": ""
+        }
+    },
+    "pipeline": {
+        "directdebit": {
+            "BPF": "Pickup"
         }
     }
 }

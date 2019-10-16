@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,11 +14,12 @@ import (
 
 //ProviderConfig is an instance of the SFTP Connection Details
 type ProviderConfig struct {
-	EncryptionKey string `json:"encryptionKey"`
-	SigningKey    string `json:"signingKey"`
-	FingerPrint   string `json:"fingerprint"`
-	KeyPassword   string `json:"keyPassword"`
-	DecryptionKey string `json:"decryptionKey"`
+	EncryptionKey         string `json:"encryptionKey"`
+	SigningKey            string `json:"signingKey"`
+	SigningKeyPassword    string `json:"signingKeyPassword"`
+	FingerPrint           string `json:"fingerprint"`
+	EncryptionKeyPassword string `json:"encryptionKeyPassword"`
+	DecryptionKey         string `json:"decryptionKey"`
 }
 
 //Provider helper functions to encrypt/decrypt files
@@ -48,45 +50,54 @@ func (p provider) DecryptFile(encryptedFile, outputFile string) error {
 
 //EncryptFile provides a simple wrapper to encrypt a file
 func (p provider) EncryptFile(plainTextFile string, outputFile string) (err error) {
-	log.Infof("Encrypting file %s to %s using EncryptionKey %s ", plainTextFile, outputFile, p.config.EncryptionKey)
+	p.log.Infof("Encrypting file %s", plainTextFile)
+	p.log.Infof("Output file %s", outputFile)
+	p.log.Infof("Using EncryptionKey %s ", p.config.EncryptionKey)
 
 	// Read in public key
-	recipientKey, err := keyFromFile(p.config.EncryptionKey)
+	recipientKey, err := p.keyFromFile(p.config.EncryptionKey)
 	if err != nil {
 		return
 	}
-	log.Debug("Key found and loaded successfully")
+	p.log.Debug("Key found and loaded successfully")
 	recipientKeys := []*openpgp.Entity{recipientKey}
 
 	var signingKey *openpgp.Entity = nil
 	if len(p.config.SigningKey) > 0 {
-		log.Debugf("Signing with %s", p.config.SigningKey)
-
-		signingKey, err = keyFromFile(p.config.SigningKey)
-		if err != nil {
-			return err
+		p.log.Debugf("Signing with %s", p.config.SigningKey)
+		if len(p.config.SigningKeyPassword) > 0 {
+			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
+		} else {
+			signingKey, err = p.keyFromFile(p.config.SigningKey)
+			if err != nil {
+				return err
+			}
 		}
-		log.Debug("Signing key loaded ")
+
+		p.log.Debug("Signing key loaded ")
 	}
 
 	hints := &openpgp.FileHints{IsBinary: true}
 	inFile, err := os.Open(plainTextFile)
 	if err != nil {
-		return
+		return err
 	}
 
 	outFile, err := os.Create(outputFile)
 	if err != nil {
-		return
+		return err
 	}
 
-	log.Debug("Performing Encryption ")
+	p.log.Debug("Performing Encryption ")
 	// @todo currently uses defaults, provide other encryption options
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
+	if err != nil {
+		return err
+	}
 
 	bytes, err := io.Copy(wc, inFile)
 	if err != nil {
-		return
+		return err
 	}
 
 	s, err := os.Stat(plainTextFile)
@@ -94,15 +105,46 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		return err
 	}
 
-	log.Debug("Comparing Encrypted bytes with bytes written to disk")
+	p.log.Debug("Comparing Encrypted bytes with bytes written to disk")
 	if s.Size() != bytes {
 		return fmt.Errorf("File size of : %d does not equal the %d bytes encrypted", s.Size(), bytes)
 	}
-	return wc.Close()
+	err = wc.Close()
+	if err == nil {
+		p.log.Infof("Decripted file to %s", plainTextFile)
+	}
+	return
+}
+
+func (p provider) decryptArmoredKey(fileName string, password string) (*openpgp.Entity, error) {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return nil, err
+	}
+	entitylist, err := openpgp.ReadArmoredKeyRing(f)
+	if err != nil {
+		return nil, err
+	}
+	if len(entitylist) != 1 {
+		return nil, errors.New("The encrypted key contains more entities than expected. Feature request ?")
+	}
+	entity := entitylist[0]
+	p.log.Debug("Private key from armored string:", entity.Identities)
+
+	// Decrypt private key using passphrase
+	passphrase := []byte(password)
+	if entity.PrivateKey != nil && entity.PrivateKey.Encrypted {
+		p.log.Debug("Decrypting private key using passphrase")
+		err := entity.PrivateKey.Decrypt(passphrase)
+		if err != nil {
+			return nil, errors.New("failed to decrypt key: " + err.Error())
+		}
+	}
+	return entity, err
 }
 
 //keyFromFile load from fil
-func keyFromFile(fileName string) (*openpgp.Entity, error) {
+func (p provider) keyFromFile(fileName string) (*openpgp.Entity, error) {
 	f, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
@@ -110,7 +152,7 @@ func keyFromFile(fileName string) (*openpgp.Entity, error) {
 	defer f.Close()
 	block, err := armor.Decode(f)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Unable to read the Signing Key. Make sure it's ASCII Armoured (not binary): %s", err.Error())
 	}
 	return openpgp.ReadEntity(packet.NewReader(block.Body))
 }
