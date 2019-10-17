@@ -4,7 +4,9 @@ import (
 	"os"
 	"strings"
 
+	uuid "github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
+	"github.com/masenocturnal/pipefire/pipelines/directdebit"
 	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -13,9 +15,9 @@ import (
 func main() {
 
 	cntxt := &daemon.Context{
-		PidFileName: "sample.pid",
+		PidFileName: "pipfire.pid",
 		PidFilePerm: 0644,
-		LogFileName: "sample.log",
+		LogFileName: "pipefire.log",
 		LogFilePerm: 0640,
 		WorkDir:     "./",
 		Umask:       027,
@@ -45,10 +47,18 @@ func main() {
 		}
 	}
 	initLogging(hostConfig.LogLevel)
+	correlationID := uuid.New()
+	directDebitPipeline := directdebit.New(correlationID.String())
 
-	err = directDebitPipeline(hostConfig)
+	// @todo make this dynamic
+	ddConfig := hostConfig.Pipelines.DirectDebit
+
+	// @todo load and execute pipelines concurrently
+	// execute pipeline
+	pipelineErrors := directDebitPipeline.Execute(&ddConfig)
+
 	// err = executePipelines(conf)
-	if err != nil {
+	if pipelineErrors != nil && len(pipelineErrors) > 0 {
 		log.Error(err.Error())
 	} else {
 		log.Info("Direct Debit Pipeline Done")

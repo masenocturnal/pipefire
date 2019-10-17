@@ -1,52 +1,96 @@
 {
     "loglevel": "debug",
     "background": "true",
-    "database": {
-        "user": "asdf",
-        "host":"asdf",
-        "password": "asdf",
-        "database": "asd",
-        "timeout": ""
-    },
-    "sftp": {
-        "connection1": {
-            "host": "fxladl.com.au",
-            "key": "/home/andmas/.ssh/certegy-sam.pem",
-            "username": "ubuntu",
-            "password": "",
-            "key_password": "",
-            "port": 22
-        },
-        "connection2": {
-            "host": "fxladl.com.au",
-            "key": "/home/andmas/.ssh/certegy-sam.pem",
-            "username": "ubuntu",
-            "password": "",
-            "key_password": "",
-            "port": 22
-        },
-        "connection3": {
-            "host": "fxladl.com.au",
-            "key": "/home/andmas/.ssh/certegy-sam.pem",
-            "username": "ubuntu",
-            "password": "",
-            "key_password": "",
-            "port": 22
-        }
-    },
-    "crypto": {
-        "encryptforanz": {
-            "encryptionKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-pub.asc",
-            "fingerprint": "2938C566341C930C51F36B0620F99C421B73A0B3",
-            "signingKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/private-signing-key.asc",
-            "signingKeyPassword": "foobar123",
-            "encryptionKeyPassword": "",
-            "decryptionKey": ""
-        }
-    },
-    "pipeline": {
+    "pipelines": {
         "directdebit": {
-            "BPF": "Pickup"
+            "database": {
+                "user": "asdf",
+                "host":"asdf",
+                "password": "asdf",
+                "database": "asd",
+                "timeout": ""
+            },
+            "tasks": {
+                "getFilesFromBFP": {
+                    "remoteDir": "/Pickup",
+                    "localDir": "/tmp/ddrun/Pickup",
+                    "sftp": {
+                        "host": "pit01.adelaide.certegy.com",
+                        "key": "/home/andmas/.ssh/id_rsa",
+                        "username": "",
+                        "password": "",
+                        "key_password": "",
+                        "port": 22
+                    }
+                },
+                "encryptFiles": 
+                { 
+                    "srcDir": "/tmp/ddrun/Pickup",
+                    "outputDir": "/tmp/ddrun/Encrypted",
+                    "providers" : {
+                        "ANZ": {
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        },
+                        "PX": {
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        },
+                        "BNZ": {
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        }
+                    }
+                },
+                "sftpFilesToANZ": {
+                    "fromDir": "/tmp/ddrun/Encrypted/ANZ",
+                    "toDir": "/Out/Certegy/DE/",
+                    "sftp": {
+                        "host": "10.130.72.213",
+                        "key": "/home/andmas/Nextcloud/Certegy/ssh/id_rsa",
+                        "username": "certegy",
+                        "password": "",
+                        "key_password": "",
+                        "port": 22
+                    }
+                },
+                "sftpFilesToPx": {
+                    "fromDir": "/tmp/ddrun/Encrypted/PX",
+                    "toDir": "/In",
+                    "sftp": {
+                        "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
+                        "key": "/home/andmas/.ssh/build-host.cer",
+                        "username": "ubuntu",
+                        "password": "",
+                        "key_password": "",
+                        "port": 22
+                    }
+                },
+                "sftpFilesToBNZ": {
+                    "fromDir": "/tmp/ddrun/Encrypted/BNZ",
+                    "toDir": "/from",
+                    "sftp": {
+                        "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
+                        "key": "/home/andmas/.ssh/build-host.cer",
+                        "username": "ubuntu",
+                        "password": "",
+                        "key_password": "",
+                        "port": 22
+                    }
+                }
+            }        
         }
     }
 }

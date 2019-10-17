@@ -49,8 +49,8 @@ type Transport interface {
 	SendFile(string, string) (*FileTransferConfirmation, error)
 	SendDir(string, string) (*list.List, *list.List)
 	ListRemoteDir(remoteDir string) error
-	GetFile(string, string) (*FileTransferConfirmation, error)
-	GetDir(string, string) (*list.List, *list.List)
+	GetFile(remoteFile string, localFile string) (*FileTransferConfirmation, error)
+	GetDir(remoteDir string, localDir string) (*list.List, *list.List)
 	CleanDir(string) error
 	RemoveDir(string) error
 	RemoveFile(string) error
@@ -316,8 +316,10 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 
 			if file.IsDir() {
 				confirmations, errList := c.GetDir(currentRemoteFilePath, filepath.Join(localDir, file.Name()))
-				if err != nil {
-					errorList.PushFrontList(errList)
+				if err != nil && errList.Len() > 0 {
+					for temp := errList.Front(); temp != nil; temp = temp.Next() {
+						errorList.PushFront(temp.Value)
+					}
 				}
 
 				confirmationList.PushFrontList(confirmations)
@@ -481,8 +483,10 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 
 			if file.IsDir() {
 				confirmations, errList := c.SendDir(currentFilePath, filepath.Join(destDir, file.Name()))
-				if err != nil {
-					errorList.PushFrontList(errList)
+				if err != nil && errList.Len() > 0 {
+					for temp := errList.Front(); temp != nil; temp = temp.Next() {
+						errorList.PushFront(temp.Value)
+					}
 				}
 				confirmationList.PushFrontList(confirmations)
 			} else {
