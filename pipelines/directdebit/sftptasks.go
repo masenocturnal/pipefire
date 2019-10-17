@@ -8,29 +8,29 @@ import (
 
 //SftpConfig Required Params for transferring to or from an SFTP Server
 type SftpConfig struct {
-	remoteDir string        `json:"remotedir"`
-	localDir  string        `json:"localdir"`
-	sftp      sftp.Endpoint `json:"sftp"`
+	RemoteDir string        `json:"remoteDir"`
+	LocalDir  string        `json:"localDir"`
+	Sftp      sftp.Endpoint `json:"sftp"`
 }
 
 // get files from a particular endpoint
 func (p pipeline) sftpGet(conf SftpConfig) error {
 	p.log.Info("Get files from BFP")
-	sftp, err := sftp.NewConnection("From", conf.sftp, p.correlationID)
+	sftp, err := sftp.NewConnection("From", conf.Sftp, p.correlationID)
 	if err != nil {
 		return err
 	}
 	defer sftp.Close()
 
 	// grab all the files from the pickup directory
-	confirmations, errors := sftp.GetDir(conf.remoteDir, conf.localDir)
+	confirmations, errors := sftp.GetDir(conf.RemoteDir, conf.LocalDir)
 
 	if errors.Len() > 0 {
 		// show all errors
 		for temp := errors.Front(); temp != nil; temp = temp.Next() {
 			p.log.Error(temp.Value)
 		}
-		return fmt.Errorf("Error getting files from %s ", conf.remoteDir)
+		return fmt.Errorf("Error getting files from %s ", conf.RemoteDir)
 	}
 
 	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
@@ -43,7 +43,7 @@ func (p pipeline) sftpGet(conf SftpConfig) error {
 // send files to a particular endpoint
 func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 
-	sftp, err := sftp.NewConnection("To", conf.sftp, p.correlationID)
+	sftp, err := sftp.NewConnection("To", conf.Sftp, p.correlationID)
 	if err != nil {
 		return
 	}

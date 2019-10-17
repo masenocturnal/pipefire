@@ -22,7 +22,7 @@ type Endpoint struct {
 	Key         string `json:"key"`
 	UserName    string `json:"username"`
 	Password    string `json:"password"`
-	KeyPassword string `json:"key_password"`
+	KeyPassword string `json:"keyPassword"`
 	Port        string `json:"port"`
 }
 
@@ -69,6 +69,7 @@ func NewConnection(name string, conf Endpoint, correlationID string) (Transport,
 			return transport, err
 		}
 		authMethod = append(authMethod, keyAuth)
+
 	}
 	if len(conf.Password) > 0 {
 		authMethod = append(authMethod, ssh.Password(conf.Password))
@@ -114,7 +115,7 @@ func NewConnection(name string, conf Endpoint, correlationID string) (Transport,
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("Connnected to %s \n", connectionString)
+	log.Printf("Connnected to %s ", connectionString)
 	transport.Name = name
 	transport.log = log.WithField("correlationId", correlationID)
 
@@ -197,7 +198,8 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	// check the remote file
 	remoteFile, err := c.Client.Lstat(remotePath)
 	if err != nil {
-		return xfer, err
+
+		return nil, fmt.Errorf("File %s: %s", remotePath, err.Error())
 	}
 	if remoteFile.IsDir() {
 		return xfer, fmt.Errorf("Remote  file %s is a directory, call GetDir()", remotePath)
@@ -205,7 +207,8 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 
 	// ignore symlinks for now
 	if remoteFile.Mode()&os.ModeSymlink != 0 {
-		return nil, err
+
+		return nil, fmt.Errorf("File %s is a symlink..ignoring. %s", remotePath, err.Error())
 	}
 
 	xfer.RemoteFileName = remotePath
@@ -256,7 +259,7 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	hashWriter.Write(contents)
 	xfer.LocalHash = hex.EncodeToString(hashWriter.Sum(nil))
 
-	c.log.Infof("Transferred \n")
+	c.log.Infoln("Transferred")
 	return xfer, err
 }
 
@@ -273,7 +276,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 
 	r, err := c.Client.Stat(remoteDir)
 	if err != nil {
-		errorList.PushFront(err)
+		errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))
 		return
 	}
 
@@ -282,7 +285,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 		// to stash it im, so let's just make it work
 		confirmation, err := c.GetFile(remoteDir, localDir)
 		if err != nil {
-			errorList.PushFront(err)
+			errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))
 		}
 		confirmationList.PushFront(confirmation)
 		// we should probably bail here as it's not a directory

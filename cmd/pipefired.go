@@ -59,7 +59,9 @@ func main() {
 
 	// err = executePipelines(conf)
 	if pipelineErrors != nil && len(pipelineErrors) > 0 {
-		log.Error(err.Error())
+		for _, err := range pipelineErrors {
+			log.Error(err.Error())
+		}
 	} else {
 		log.Info("Direct Debit Pipeline Done")
 	}

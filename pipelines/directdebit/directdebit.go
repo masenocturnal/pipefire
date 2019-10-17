@@ -64,8 +64,10 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 	// @todo config validation
 	// @todo turn into loop
 	bfpSftp := config.Tasks.GetFilesFromBFP
-	if err := p.sftpTo(bfpSftp); err != nil {
+	if err := p.sftpGet(bfpSftp); err != nil {
 		errorList = append(errorList, err)
+		p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
+		return errorList
 	}
 
 	encryptForANZ := config.Tasks.EncryptFiles
