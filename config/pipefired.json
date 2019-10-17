@@ -15,11 +15,11 @@
                     "remoteDir": "/Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "pit01.adelaide.certegy.com",
-                        "key": "/home/andmas/.ssh/id_rsa",
+                        "host": "web01.nocturnal.net.au",
+                        "key": "",
                         "username": "",
                         "password": "",
-                        "key_password": "",
+                        "keyPassword": "",
                         "port": 22
                     }
                 },
@@ -62,7 +62,7 @@
                         "key": "/home/andmas/Nextcloud/Certegy/ssh/id_rsa",
                         "username": "certegy",
                         "password": "",
-                        "key_password": "",
+                        "keyPassword": "",
                         "port": 22
                     }
                 },
@@ -74,7 +74,7 @@
                         "key": "/home/andmas/.ssh/build-host.cer",
                         "username": "ubuntu",
                         "password": "",
-                        "key_password": "",
+                        "keyPassword": "",
                         "port": 22
                     }
                 },
@@ -86,7 +86,7 @@
                         "key": "/home/andmas/.ssh/build-host.cer",
                         "username": "ubuntu",
                         "password": "",
-                        "key_password": "",
+                        "keyPassword": "",
                         "port": 22
                     }
                 }

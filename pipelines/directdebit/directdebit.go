@@ -70,6 +70,11 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 		return errorList
 	}
 
+	if err := p.sftpClean(bfpSftp); err != nil {
+		errorList = append(errorList, err)
+		p.log.Warningf("Unable to clean remote dir %s", err.Error())
+	}
+
 	encryptForANZ := config.Tasks.EncryptFiles
 	if err := p.encryptFiles(encryptForANZ); err != nil {
 		errorList = append(errorList, err)

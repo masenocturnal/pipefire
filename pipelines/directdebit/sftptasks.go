@@ -1,6 +1,7 @@
 package directdebit
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/masenocturnal/pipefire/internal/sftp"
@@ -24,7 +25,6 @@ func (p pipeline) sftpGet(conf SftpConfig) error {
 
 	// grab all the files from the pickup directory
 	confirmations, errors := sftp.GetDir(conf.RemoteDir, conf.LocalDir)
-
 	if errors.Len() > 0 {
 		// show all errors
 		for temp := errors.Front(); temp != nil; temp = temp.Next() {
@@ -34,14 +34,38 @@ func (p pipeline) sftpGet(conf SftpConfig) error {
 	}
 
 	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
-		p.log.Info(temp.Value)
+		result, _ := json.MarshalIndent(temp.Value, "", " ")
+		p.log.Info(result)
 	}
+
+	if err := sftp.CleanDir("/home/am/nocturnal.net.au"); err != nil {
+		return err
+	}
+
 	p.log.Info("Complete")
+	return err
+}
+
+// sftpClean cleans the repote directory
+func (p pipeline) sftpClean(conf SftpConfig) (err error) {
+	p.log.Infof("Cleaning remote dir: %s ", conf.RemoteDir)
+
+	sftp, err := sftp.NewConnection("To", conf.Sftp, p.correlationID)
+	if err != nil {
+		return
+	}
+	defer sftp.Close()
+
+	err = sftp.CleanDir(conf.RemoteDir)
+	if err == nil {
+		p.log.Infof("Complete: Removed files from: %s ", conf.RemoteDir)
+	}
 	return err
 }
 
 // send files to a particular endpoint
 func (p pipeline) sftpTo(conf SftpConfig) (err error) {
+	p.log.Infof("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
 
 	sftp, err := sftp.NewConnection("To", conf.Sftp, p.correlationID)
 	if err != nil {
@@ -50,44 +74,20 @@ func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 
 	defer sftp.Close()
 
-	// // Get Remote Dir
-	// status, errors := sftp.GetDir("/home/am/nocturnal.net.au", "/tmp/foobar")
-	// if errors != nil {
-	// 	// show all errors
-	// 	for temp := errors.Front(); temp != nil; temp = temp.Next() {
-	// 		fmt.Println(temp.Value)
-	// 	}
-	// }
+	confirmations, errors := sftp.SendDir(conf.LocalDir, conf.RemoteDir)
+	if errors.Len() > 0 {
+		// show all errors
+		for temp := errors.Front(); temp != nil; temp = temp.Next() {
+			p.log.Error(temp.Value)
+		}
+		return fmt.Errorf("Error getting files from %s ", conf.RemoteDir)
+	}
 
-	// if errors.Len() == 0 {
-	// 	if err := sftp.CleanDir("/home/am/nocturnal.net.au"); err != nil {
-	// 		return err
-	// 	}
-	// }
+	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
+		result, _ := json.MarshalIndent(temp.Value, "", " ")
+		p.log.Info(result)
+	}
 
-	// result, _ := json.MarshalIndent(foo, "", " ")
-	// fmt.Println(string(result))
-
-	// confirmations, errors := sftp.SendDir("/home/andmas/tmp/RefundFiles", "/home/ubuntu/tmp")
-	// if errors != nil {
-	// 	// show all errors
-	// 	for temp := errors.Front(); temp != nil; temp = temp.Next() {
-	// 		fmt.Println(temp.Value)
-	// 	}
-	// }
-
-	// // show success
-	// @todo loop recursive
-
-	// for temp := status.Front(); temp != nil; temp = temp.Next() {
-	// 	result, _ := json.MarshalIndent(temp.Value, "", " ")
-	// 	log.Debug(string(result))
-	// }
-
-	// if err != nil {
-	// 	contextLogger.Error(err.Error())
-	// 	return err
-	// }
-
+	p.log.Infof("Sftp Complete, remote %s ", conf.RemoteDir)
 	return nil
 }
