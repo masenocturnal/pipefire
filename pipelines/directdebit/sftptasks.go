@@ -35,11 +35,7 @@ func (p pipeline) sftpGet(conf SftpConfig) error {
 
 	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
 		result, _ := json.MarshalIndent(temp.Value, "", " ")
-		p.log.Info(result)
-	}
-
-	if err := sftp.CleanDir("/home/am/nocturnal.net.au"); err != nil {
-		return err
+		p.log.Info(string(result))
 	}
 
 	p.log.Info("Complete")

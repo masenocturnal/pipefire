@@ -292,10 +292,6 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 		return
 	}
 
-	// remotePath is a directory, so is the localPath
-	// create the remote directory name within the local path
-	localDir = filepath.Join(localDir, r.Name())
-
 	// try and make the directory if it doesn't exist
 	err = os.MkdirAll(localDir, r.Mode())
 	if err != nil {
@@ -318,7 +314,8 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 			currentRemoteFilePath := filepath.Join(remoteDir, file.Name())
 
 			if file.IsDir() {
-				confirmations, errList := c.GetDir(currentRemoteFilePath, filepath.Join(localDir, file.Name()))
+				newLocalFilePath := filepath.Join(localDir, file.Name())
+				confirmations, errList := c.GetDir(currentRemoteFilePath, newLocalFilePath)
 				if err != nil && errList.Len() > 0 {
 					for temp := errList.Front(); temp != nil; temp = temp.Next() {
 						errorList.PushFront(temp.Value)

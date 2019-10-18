@@ -1,16 +1,25 @@
 package crypto
 
 import (
+	"crypto"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	log "github.com/sirupsen/logrus"
+
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/openpgp/packet"
+	"golang.org/x/crypto/ripemd160"
 )
+
+func init() {
+	// we need to register this for the ANZ key.
+	// this is deprecated but hopefully people make newer keys
+	crypto.RegisterHash(crypto.RIPEMD160, ripemd160.New)
+}
 
 //ProviderConfig is an instance of the SFTP Connection Details
 type ProviderConfig struct {
@@ -111,7 +120,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 	err = wc.Close()
 	if err == nil {
-		p.log.Infof("Decripted file to %s", plainTextFile)
+		p.log.Infof("Decrypted file to %s", plainTextFile)
 	}
 	return
 }
@@ -154,5 +163,6 @@ func (p provider) keyFromFile(fileName string) (*openpgp.Entity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Unable to read the Signing Key. Make sure it's ASCII Armoured (not binary): %s", err.Error())
 	}
+
 	return openpgp.ReadEntity(packet.NewReader(block.Body))
 }

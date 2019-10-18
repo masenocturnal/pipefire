@@ -8,7 +8,7 @@ import (
 type Pipeline interface {
 	Execute(config *Config) []error
 	sftpGet(conf SftpConfig) error
-	encryptFiles(config EncryptFilesConfig) (err error)
+	encryptFiles(config EncryptFilesConfig) (err []error)
 	sftpTo(conf SftpConfig) error
 }
 
@@ -75,9 +75,14 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 		p.log.Warningf("Unable to clean remote dir %s", err.Error())
 	}
 
-	encryptForANZ := config.Tasks.EncryptFiles
-	if err := p.encryptFiles(encryptForANZ); err != nil {
-		errorList = append(errorList, err)
+	encryptionConfig := config.Tasks.EncryptFiles
+	if err := p.encryptFiles(encryptionConfig); err != nil {
+
+		for _, e := range err {
+			errorList = append(errorList, e)
+		}
+		p.log.Error("Unable to encrypt all files..Aborting")
+		return errorList
 	}
 
 	anzSftp := config.Tasks.SftpFilesToANZ

@@ -12,12 +12,12 @@
             },
             "tasks": {
                 "getFilesFromBFP": {
-                    "remoteDir": "/Pickup",
+                    "remoteDir": "./Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "web01.nocturnal.net.au",
+                        "host": "localhost",
                         "key": "",
-                        "username": "",
+                        "username": "andmas",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
@@ -25,27 +25,27 @@
                 },
                 "encryptFiles": 
                 { 
-                    "srcDir": "/tmp/ddrun/Pickup",
+                    "srcDir": "/tmp/ddrun/Pickup/",
                     "outputDir": "/tmp/ddrun/Encrypted",
                     "providers" : {
-                        "ANZ": {
-                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                        "anz": {
+                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/anz.pub",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
                             "decryptionKey": ""
                         },
-                        "PX": {
-                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                        "px": {
+                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/px.pub",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
                             "decryptionKey": ""
                         },
-                        "BNZ": {
-                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                        "bnz": {
+                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/bnz.pub",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
