@@ -42,6 +42,7 @@ type pipeline struct {
 	correlationID string
 	DbConnection  DbConnection
 	taskConfig    Config
+	cleanRemote   bool
 }
 
 // New Pipeline
@@ -52,6 +53,7 @@ func New(correlationID string) Pipeline {
 			"correlationId": correlationID,
 		}),
 		correlationID: correlationID,
+		cleanRemote:   false,
 	}
 
 	return pipeline
@@ -70,9 +72,11 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 		return errorList
 	}
 
-	if err := p.sftpClean(bfpSftp); err != nil {
-		errorList = append(errorList, err)
-		p.log.Warningf("Unable to clean remote dir %s", err.Error())
+	if p.cleanRemote {
+		if err := p.sftpClean(bfpSftp); err != nil {
+			errorList = append(errorList, err)
+			p.log.Warningf("Unable to clean remote dir %s", err.Error())
+		}
 	}
 
 	encryptionConfig := config.Tasks.EncryptFiles
@@ -85,20 +89,20 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 		return errorList
 	}
 
-	anzSftp := config.Tasks.SftpFilesToANZ
-	if err := p.sftpTo(anzSftp); err != nil {
-		errorList = append(errorList, err)
-	}
+	// anzSftp := config.Tasks.SftpFilesToANZ
+	// if err := p.sftpTo(anzSftp); err != nil {
+	// 	errorList = append(errorList, err)
+	// }
 
-	pxSftp := config.Tasks.SftpFilesToPx
-	if err := p.sftpTo(pxSftp); err != nil {
-		errorList = append(errorList, err)
-	}
+	// pxSftp := config.Tasks.SftpFilesToPx
+	// if err := p.sftpTo(pxSftp); err != nil {
+	// 	errorList = append(errorList, err)
+	// }
 
-	bnzSftp := config.Tasks.SftpFilesToBNZ
-	if err := p.sftpTo(bnzSftp); err != nil {
-		errorList = append(errorList, err)
-	}
+	// bnzSftp := config.Tasks.SftpFilesToBNZ
+	// if err := p.sftpTo(bnzSftp); err != nil {
+	// 	errorList = append(errorList, err)
+	// }
 
 	if len(errorList) > 0 {
 		p.log.Warn("Finished DD Pipeline with Errors")
