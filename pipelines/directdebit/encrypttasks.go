@@ -15,6 +15,7 @@ type EncryptFilesConfig struct {
 	SrcDir    string                           `json:"srcDir"`
 	OutputDir string                           `json:"outputDir"`
 	Providers map[string]crypto.ProviderConfig `json:"providers"`
+	Enabled   bool                             `json:"enabled"`
 }
 
 func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
@@ -26,7 +27,7 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 	var bank string = "anz"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if anzProviderConfig, ok := config.Providers[bank]; ok {
-		anzCryptoProvider := crypto.NewProvider(anzProviderConfig, p.correlationID)
+		anzCryptoProvider := crypto.NewProvider(anzProviderConfig, p.log)
 		srcDir := filepath.Join(config.SrcDir, "GA")
 		outputDir := filepath.Join(config.OutputDir, "ANZ")
 		err := p.encryptFilesInDir(anzCryptoProvider, srcDir, outputDir)
@@ -45,9 +46,9 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 	bank = "px"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if pxProviderConfig, ok := config.Providers[bank]; ok {
-		pxCryptoProvider := crypto.NewProvider(pxProviderConfig, p.correlationID)
+		pxCryptoProvider := crypto.NewProvider(pxProviderConfig, p.log)
 		srcDir := filepath.Join(config.SrcDir, "PX")
-		outputDir := filepath.Join(config.SrcDir, config.OutputDir, "PX")
+		outputDir := filepath.Join(config.OutputDir, "PX")
 
 		err := p.encryptFilesInDir(pxCryptoProvider, srcDir, outputDir)
 		if err != nil {
@@ -64,9 +65,9 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 	bank = "bnz"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if bnzProviderConfig, ok := config.Providers[bank]; ok {
-		bnzCryptoProvider := crypto.NewProvider(bnzProviderConfig, p.correlationID)
+		bnzCryptoProvider := crypto.NewProvider(bnzProviderConfig, p.log)
 		srcDir := filepath.Join(config.SrcDir, "BNZ")
-		outputDir := filepath.Join(config.SrcDir, config.OutputDir, "BNZ")
+		outputDir := filepath.Join(config.OutputDir, "BNZ")
 		err := p.encryptFilesInDir(bnzCryptoProvider, srcDir, outputDir)
 		if err != nil {
 			for _, e := range err {
@@ -79,7 +80,7 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 		errList = append(errList, errors.New(msg))
 	}
 
-	p.log.Info("Decryption Task Complete")
+	p.log.Debug("Encryption Task Complete")
 	return
 }
 

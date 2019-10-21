@@ -43,11 +43,11 @@ type provider struct {
 }
 
 //NewProvider returns a Crypto Provider
-func NewProvider(config ProviderConfig, correlationID string) Provider {
+func NewProvider(config ProviderConfig, log *log.Entry) Provider {
 
 	provider := &provider{
 		config: config,
-		log:    log.WithField("correlationId", correlationID),
+		log:    log,
 	}
 	return provider
 }
@@ -59,9 +59,9 @@ func (p provider) DecryptFile(encryptedFile, outputFile string) error {
 
 //EncryptFile provides a simple wrapper to encrypt a file
 func (p provider) EncryptFile(plainTextFile string, outputFile string) (err error) {
-	p.log.Infof("Encrypting file %s", plainTextFile)
-	p.log.Infof("Output file %s", outputFile)
-	p.log.Infof("Using EncryptionKey %s ", p.config.EncryptionKey)
+	p.log.Debugf("Encrypting file %s", plainTextFile)
+	p.log.Debugf("Output file %s", outputFile)
+	p.log.Debugf("Using EncryptionKey %s ", p.config.EncryptionKey)
 
 	// Read in public key
 	recipientKey, err := p.keyFromFile(p.config.EncryptionKey)
@@ -120,7 +120,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 	err = wc.Close()
 	if err == nil {
-		p.log.Infof("Decrypted file to %s", plainTextFile)
+		p.log.Debugf("Decrypted file to %s", plainTextFile)
 	}
 	return
 }

@@ -48,7 +48,13 @@ func main() {
 	}
 	initLogging(hostConfig.LogLevel)
 	correlationID := uuid.New()
-	directDebitPipeline := directdebit.New(correlationID.String())
+
+	logEntry := log.WithFields(log.Fields{
+		"correlationId": correlationID,
+	})
+
+	// create the dd pipeline
+	directDebitPipeline := directdebit.New(correlationID.String(), logEntry)
 
 	// @todo make this dynamic
 	ddConfig := hostConfig.Pipelines.DirectDebit
@@ -70,6 +76,7 @@ func main() {
 func initLogging(lvl string) {
 	//log.SetFormatter(&log.JSONFormatter{})
 	log.SetFormatter(&log.TextFormatter{})
+
 	log.SetOutput(os.Stdout)
 
 	lvl = strings.ToLower(lvl)
@@ -82,7 +89,7 @@ func initLogging(lvl string) {
 		log.SetLevel(log.WarnLevel)
 		break
 	case "information":
-		log.SetLevel(log.WarnLevel)
+		log.SetLevel(log.InfoLevel)
 		break
 	}
 }

@@ -29,6 +29,7 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 	conf.SetConfigName(configName)
 	conf.AddConfigPath("/etc/pipefire/")
 	conf.AddConfigPath("../config/")
+	conf.AddConfigPath("./")
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()

@@ -58,7 +58,7 @@ type Transport interface {
 }
 
 //NewConnection establish a connection
-func NewConnection(name string, conf Endpoint, correlationID string) (Transport, error) {
+func NewConnection(name string, conf Endpoint, log *log.Entry) (Transport, error) {
 	var transport transport
 
 	var authMethod []ssh.AuthMethod = make([]ssh.AuthMethod, 0)
@@ -80,6 +80,7 @@ func NewConnection(name string, conf Endpoint, correlationID string) (Transport,
 		User:            conf.UserName,
 		Auth:            authMethod,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+
 		// max time to establish connection
 		//HostKeyCallback: ssh.FixedHostKey(hostKey),
 	}
@@ -105,19 +106,19 @@ func NewConnection(name string, conf Endpoint, correlationID string) (Transport,
 	transport.Session = sshClient
 
 	go func() {
-		err := transport.Session.Wait()
-		log.Info("Connection Closed")
-		log.Error(err.Error())
+		log.Debug("Connection Closed")
 	}()
 
+	opts := sftp.MaxConcurrentRequestsPerFile(1)
+
 	// create new SFTP client
-	transport.Client, err = sftp.NewClient(transport.Session)
+	transport.Client, err = sftp.NewClient(transport.Session, opts)
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("Connnected to %s ", connectionString)
 	transport.Name = name
-	transport.log = log.WithField("correlationId", correlationID)
+	transport.log = log
 
 	return transport, err
 }
@@ -126,7 +127,7 @@ func NewConnection(name string, conf Endpoint, correlationID string) (Transport,
 //and remove any files in them leaving the directory structure in place
 func (c transport) CleanDir(remoteDir string) error {
 	log := c.log.WithField("Remote Directory", remoteDir)
-	log.Infof("Attempting to clean remote directory: %s", remoteDir)
+	log.Debugf("Attempting to clean remote directory: %s", remoteDir)
 
 	// loop through the directory
 	// and get all files and directories
@@ -156,7 +157,7 @@ func (c transport) CleanDir(remoteDir string) error {
 		}
 	}
 	if lastError == nil {
-		log.Info("Completed")
+		log.Debug("Completed")
 	}
 	return lastError
 }
@@ -172,10 +173,10 @@ func (c transport) RemoveDir(remoteDir string) error {
 
 //RemoveFile wrapper arround the underlying SFTP Client Remove function
 func (c transport) RemoveFile(remoteFile string) error {
-	c.log.Infof("Attempting to delete file %s@%s: ", remoteFile, c.Name)
+	c.log.Debugf("Attempting to delete file %s@%s: ", remoteFile, c.Name)
 	err := c.Client.Remove(remoteFile)
 	if err == nil {
-		c.log.Info("Removed")
+		c.log.Debug("Removed")
 	}
 	return err
 }
@@ -183,7 +184,7 @@ func (c transport) RemoveFile(remoteFile string) error {
 //	GetFile Acquires a file from the remote service
 func (c transport) GetFile(remotePath string, localPath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
-	c.log.Infof("Attempting to get: %s@%s to %s@local: ", remotePath, c.Name, localPath)
+	c.log.Debugf("Attempting to get: %s@%s to %s@local: ", remotePath, c.Name, localPath)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
@@ -259,7 +260,7 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	hashWriter.Write(contents)
 	xfer.LocalHash = hex.EncodeToString(hashWriter.Sum(nil))
 
-	c.log.Infoln("Transferred")
+	c.log.Debugln("Transferred")
 	return xfer, err
 }
 
@@ -267,7 +268,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 	confirmationList = list.New()
 	errorList = list.New()
 
-	c.log.Infof("Attempting to GetDir %s to %s ", remoteDir, localDir)
+	c.log.Debugf("Attempting to GetDir %s to %s ", remoteDir, localDir)
 	err := os.MkdirAll(localDir, 0700)
 	if err != nil {
 		errorList.PushFront(err)
@@ -344,7 +345,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 func (c transport) SendFile(localPath string, remotePath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 
-	c.log.Infof("Attempting to send: %s to %s@%s: ", localPath, remotePath, c.Name)
+	c.log.Debugf("Attempting to send: %s to %s@%s: ", localPath, remotePath, c.Name)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
@@ -389,11 +390,11 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 		// lets see if it's a directory
 		if p.IsDir() {
 			// write into the directory with file name
-			remotePath = remotePath + localFileInfo.Name()
-			c.log.Infof("Writing to remote server %s: %s \n", c.Name, remotePath)
+			remotePath = filepath.Join(remotePath, localFileInfo.Name())
+			c.log.Debugf("Writing to remote server %s: %s \n", c.Name, remotePath)
 		} else {
 			// file exists already...replace ?
-			c.log.Info("Remote file already exists. Replacing")
+			c.log.Debug("Remote file already exists. Replacing")
 		}
 	}
 
@@ -410,16 +411,23 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	transferredBytes, err := multiwriter.Write(data)
 	xfer.TransferredBytes = int64(transferredBytes)
 	xfer.TransferredHash = hex.EncodeToString(hashWriter.Sum(nil))
+	xfer.RemoteSize = xfer.TransferredBytes
 
+	if err != nil {
+		c.log.Errorf("Error writing %s", remotePath)
+	}
 	// sometimes SFTP Servers will lock or whisk away the file after the
 	// file handle has closed
-	remoteFileInfo, err := client.Stat(remotePath)
-	if err != nil {
-		c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
-	} else {
-		xfer.RemoteSize = remoteFileInfo.Size()
-	}
-	c.log.Info("Transferred")
+	/*
+		// I think some sftp servers have issues with this
+		remoteFileInfo, err := client.Stat(remotePath)
+		if err != nil {
+			c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
+		} else {
+			xfer.RemoteSize = remoteFileInfo.Size()
+		}
+	*/
+	c.log.Debug("Transferred")
 	return xfer, err
 }
 
@@ -443,6 +451,11 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 
 	confirmationList = list.New()
 	errorList = list.New()
+
+	if len(srcDir) == 0 || len(destDir) == 0 {
+		errorList.PushFront(fmt.Errorf("Either the srcDir %s, or the destDir: %s is not present but both are required", srcDir, destDir))
+		return
+	}
 
 	// get the SFTP Client connectied to the destination server
 	client := c.Client
@@ -471,7 +484,7 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	// try and make the directory if it doesn't exist
 	err = client.MkdirAll(destDir)
 	if err != nil {
-		errorList.PushFront(err)
+		errorList.PushFront(fmt.Errorf("Unable to create remote directory: %s Error: %s", destDir, err))
 		return
 	}
 
