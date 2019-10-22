@@ -393,20 +393,24 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	}
 
 	if p != nil {
-		// lets see if it's a directory
 		if p.IsDir() {
 			// write into the directory with file name
 			remotePath = filepath.Join(remotePath, localFileInfo.Name())
-			c.log.Debugf("Writing to remote server %s: %s \n", c.Name, remotePath)
+			c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
 		} else {
 			// file exists already...replace ?
-			c.log.Debug("Remote file already exists. Replacing")
+			err = fmt.Errorf("remote %s a file which already exists", remotePath)
+			c.log.Debugf(err.Error())
+			return xfer, err
 		}
 	}
 
+	c.log.Debugf("Trying to create %s", remotePath)
 	// Create the remote file for writing
 	remoteFile, err := client.Create(remotePath)
 	if err != nil {
+		c.log.Errorf("Trying to create %s", err.Error())
+		// do we close the connection here ?
 		return xfer, err
 	}
 	xfer.RemoteFileName = remoteFile.Name()
@@ -490,8 +494,11 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	// try and make the directory if it doesn't exist
 	err = client.MkdirAll(destDir)
 	if err != nil {
-		errorList.PushFront(fmt.Errorf("Unable to create remote directory: %s Error: %s", destDir, err))
-		return
+		// It's been reported that some sftp servers fail on this however it could just
+		// be because the directory already exists
+		c.log.Warnf("Unable to create remote directory: %s Error: %s", destDir, err)
+		// errorList.PushFront(fmt.Errorf()
+		// return
 	}
 
 	// only read it there is something to read
