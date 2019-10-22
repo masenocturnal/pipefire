@@ -345,7 +345,13 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 func (c transport) SendFile(localPath string, remotePath string) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 
-	c.log.Debugf("Attempting to send: %s to %s@%s: ", localPath, remotePath, c.Name)
+	if len(remotePath) == 0 || len(localPath) == 0 {
+		err := fmt.Errorf("Either the local path %s: or the remotePath is emtpy: %s", localPath, remotePath)
+		c.log.Errorf(err.Error())
+		return xfer, err
+	}
+
+	c.log.Debugf("Attempting to send: localPath: %s to remotePath: %s ", localPath, remotePath)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
