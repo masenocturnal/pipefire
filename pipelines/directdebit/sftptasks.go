@@ -48,7 +48,7 @@ func (p pipeline) sftpClean(conf SftpConfig) (err error) {
 	p.log.Infof("Begin sftpClean: %s", conf.Sftp.Host)
 	p.log.Debugf("Cleaning remote dir: %s ", conf.RemoteDir)
 
-	sftp, err := sftp.NewConnection("To", conf.Sftp, p.log)
+	sftp, err := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, p.log)
 	if err != nil {
 		return
 	}
@@ -66,7 +66,7 @@ func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 	p.log.Infof("Begin sftpTo: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
 
-	sftp, err := sftp.NewConnection("To", conf.Sftp, p.log)
+	sftp, err := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, p.log)
 	if err != nil {
 		return
 	}
