@@ -389,7 +389,8 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	// see if the remote file exists..
 	p, err := client.Stat(remotePath)
 	if err != nil {
-		return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
+		c.log.Debugf("Remote file %s doesn't exist", remotePath)
+		// return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
 	}
 
 	if p != nil {
@@ -409,7 +410,7 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	// Create the remote file for writing
 	remoteFile, err := client.Create(remotePath)
 	if err != nil {
-		c.log.Errorf("Trying to create %s", err.Error())
+		c.log.Errorf("Unable to create file %s", err.Error())
 		// do we close the connection here ?
 		return xfer, err
 	}
