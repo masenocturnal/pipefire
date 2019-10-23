@@ -208,7 +208,6 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 
 	// ignore symlinks for now
 	if remoteFile.Mode()&os.ModeSymlink != 0 {
-
 		return nil, fmt.Errorf("File %s is a symlink..ignoring. %s", remotePath, err.Error())
 	}
 
@@ -364,7 +363,7 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	if localFileInfo.IsDir() {
 		return xfer, errors.New(localPath + ": is a directory. Call SendDir()")
 	}
-	xfer.LocalFileName = filepath.Join(localPath, localFileInfo.Name())
+	xfer.LocalFileName = localFileInfo.Name()
 	xfer.LocalSize = localFileInfo.Size()
 
 	// ensure we can read the local file first before we create the remote file
@@ -387,13 +386,14 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	}
 
 	// see if the remote file exists..
-	p, err := client.Stat(remotePath)
+	p, err := client.Lstat(remotePath)
 	if err != nil {
 		c.log.Debugf("Remote file %s doesn't exist", remotePath)
 		// return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
 	}
 
 	if p != nil {
+
 		if p.IsDir() {
 			// write into the directory with file name
 			remotePath = filepath.Join(remotePath, localFileInfo.Name())
@@ -408,7 +408,8 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 
 	c.log.Debugf("Trying to create %s", remotePath)
 	// Create the remote file for writing
-	remoteFile, err := client.Create(remotePath)
+	//remoteFile, err := client.Create(remotePath)
+	remoteFile, err := client.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 	if err != nil {
 		c.log.Errorf("Unable to create file %s", err.Error())
 		// do we close the connection here ?
@@ -419,13 +420,15 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	// write the bytes to the remote file _and_ the hash writer at the same time
 	// @todo use TeeReader ?
 	multiwriter := io.MultiWriter(remoteFile, hashWriter)
+
+	// actually write the packets
 	transferredBytes, err := multiwriter.Write(data)
 	xfer.TransferredBytes = int64(transferredBytes)
 	xfer.TransferredHash = hex.EncodeToString(hashWriter.Sum(nil))
 	xfer.RemoteSize = xfer.TransferredBytes
 
 	if err != nil {
-		c.log.Errorf("Error writing %s", remotePath)
+		c.log.Errorf("Error writing %s. Error: %s", remotePath, err.Error())
 	}
 	// sometimes SFTP Servers will lock or whisk away the file after the
 	// file handle has closed
@@ -497,7 +500,7 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	if err != nil {
 		// It's been reported that some sftp servers fail on this however it could just
 		// be because the directory already exists
-		c.log.Warnf("Unable to create remote directory: %s Error: %s", destDir, err)
+		c.log.Warnf("Unable to create remote directory: %s Error: %s", destDir, err.Error())
 		// errorList.PushFront(fmt.Errorf()
 		// return
 	}
