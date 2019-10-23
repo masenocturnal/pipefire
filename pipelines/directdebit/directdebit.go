@@ -105,9 +105,10 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 	p.log.Info("SftpFilesToANZ Start")
 	anzSftp := config.Tasks.SftpFilesToANZ
 	if anzSftp.Enabled {
-		if err := p.sftpTo(anzSftp); err != nil {
+		if err := p.sftpToSafe(anzSftp); err != nil {
 			errorList = append(errorList, err)
 		}
+
 		p.log.Info("SftpFilesToANZ Complete")
 	} else {
 		p.log.Info("SftpFilesToANZ Skipped")

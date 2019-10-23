@@ -87,6 +87,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 
 	hints := &openpgp.FileHints{IsBinary: true}
+
 	inFile, err := os.Open(plainTextFile)
 	if err != nil {
 		return err
@@ -98,6 +99,8 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 
 	p.log.Debug("Performing Encryption ")
+	//config := &packet.Config{}
+
 	// @todo currently uses defaults, provide other encryption options
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
 	if err != nil {
