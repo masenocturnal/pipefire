@@ -386,24 +386,30 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	}
 
 	// see if the remote file exists..
-	p, err := client.Lstat(remotePath)
+	p, err := client.ReadDir(remotePath)
+	//p, err := client.Lstat(remotePath)
 	if err != nil {
 		c.log.Debugf("Remote file %s doesn't exist", remotePath)
 		// return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
 	}
 
 	if p != nil {
-
-		if p.IsDir() {
-			// write into the directory with file name
-			remotePath = filepath.Join(remotePath, localFileInfo.Name())
-			c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
-		} else {
-			// file exists already...replace ?
-			err = fmt.Errorf("remote %s a file which already exists", remotePath)
-			c.log.Debugf(err.Error())
-			return xfer, err
-		}
+		remotePath = filepath.Join(remotePath, localFileInfo.Name())
+		c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
+		// if p.IsDir() {
+		// 	// write into the directory with file name
+		// 	remotePath = filepath.Join(remotePath, localFileInfo.Name())
+		// 	c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
+		// } else {
+		// 	// file exists already...replace ?
+		// 	err = fmt.Errorf("remote %s a file which already exists", remotePath)
+		// 	c.log.Debugf(err.Error())
+		// 	return xfer, err
+		// }
+	} else {
+		err = fmt.Errorf("remote %s a file which already exists", remotePath)
+		c.log.Debugf(err.Error())
+		return xfer, err
 	}
 
 	c.log.Debugf("Trying to create %s", remotePath)
