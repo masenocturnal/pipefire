@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/viper"
 )
 
+const version string = "0.9.1"
+
 func main() {
 
 	cntxt := &daemon.Context{
@@ -34,7 +36,7 @@ func main() {
 	// }
 	// defer cntxt.Release()
 
-	log.Info("PipeFire Daemon Started")
+	log.Infof("PipeFire Daemon Started. Version : %s ", version)
 	hostConfig, err := config.ReadApplicationConfig("pipefired")
 
 	if err != nil {
