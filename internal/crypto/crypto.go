@@ -107,7 +107,6 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	//config := &packet.Config{}
 	hints := &openpgp.FileHints{
 		IsBinary: true,
-		FileName: outputFile,
 	}
 	// @todo currently uses defaults, provide other encryption options
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
@@ -117,6 +116,13 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 
 	bytes, err := io.Copy(wc, inFile)
 	if err != nil {
+		p.log.Errorf("Error Copying : %s", err.Error())
+		return err
+	}
+
+	err = wc.Close()
+	if err != nil {
+		p.log.Errorf("Error Closing pgp writer : %s", err.Error())
 		return err
 	}
 
@@ -129,10 +135,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	if s.Size() != bytes {
 		return fmt.Errorf("File size of : %d does not equal the %d bytes encrypted", s.Size(), bytes)
 	}
-	err = wc.Close()
-	if err != nil {
-		p.log.Errorf("Error Closing pgp writer : %s", err.Error())
-	}
+
 	p.log.Debugf("Decrypted file to %s", plainTextFile)
 
 	return
