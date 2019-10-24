@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.2"
+const version string = "0.9.3"
 
 func main() {
 

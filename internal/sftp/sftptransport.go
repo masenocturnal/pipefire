@@ -386,17 +386,23 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	}
 
 	// see if the remote file exists..
-	p, err := client.ReadDir(remotePath)
-	//p, err := client.Lstat(remotePath)
+	p, err := client.Stat(remotePath)
+	c.log.Debugf("Stat %s , %v", remotePath, p)
 	if err != nil {
 		c.log.Debugf("Remote file %s doesn't exist", remotePath)
 		// return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
 	}
-
+	c.log.Debugf("%v %s", p, p)
 	if p != nil {
 		remotePath = filepath.Join(remotePath, localFileInfo.Name())
 		c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
-		// if p.IsDir() {
+		if p.IsDir() {
+			c.log.Debugf("Is dir %s ", remotePath)
+		} else {
+			fileMode := p.Mode()
+			c.log.Debugf("Mode is regular : %v, %s", fileMode.IsRegular(), fileMode.String())
+		}
+
 		// 	// write into the directory with file name
 		// 	remotePath = filepath.Join(remotePath, localFileInfo.Name())
 		// 	c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
