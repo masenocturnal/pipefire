@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.1"
+const version string = "0.9.2"
 
 func main() {
 
@@ -47,6 +47,7 @@ func main() {
 			// Config file was found but another error was produced
 			log.Print("Encountered error: " + err.Error())
 		}
+		os.Exit(1)
 	}
 	initLogging(hostConfig.LogLevel)
 	correlationID := uuid.New()
