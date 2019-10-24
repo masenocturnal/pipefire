@@ -77,6 +77,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		if len(p.config.SigningKeyPassword) > 0 {
 			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
 		} else {
+
 			signingKey, err = p.keyFromFile(p.config.SigningKey)
 			if err != nil {
 				return err
@@ -86,7 +87,11 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		p.log.Debug("Signing key loaded ")
 	}
 
-	hints := &openpgp.FileHints{IsBinary: true}
+	// do we need to do this ?
+	// compressed, err := gzip.NewWriterLevel(plain, gzip.BestCompression)
+	// kingpin.FatalIfError(err, "Invalid compression level")
+
+	// n, err := io.Copy(compressed, os.Stdin)
 
 	inFile, err := os.Open(plainTextFile)
 	if err != nil {
@@ -100,7 +105,10 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 
 	p.log.Debug("Performing Encryption ")
 	//config := &packet.Config{}
-
+	hints := &openpgp.FileHints{
+		IsBinary: true,
+		FileName: outputFile,
+	}
 	// @todo currently uses defaults, provide other encryption options
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
 	if err != nil {
@@ -122,9 +130,11 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		return fmt.Errorf("File size of : %d does not equal the %d bytes encrypted", s.Size(), bytes)
 	}
 	err = wc.Close()
-	if err == nil {
-		p.log.Debugf("Decrypted file to %s", plainTextFile)
+	if err != nil {
+		p.log.Errorf("Error Closing pgp writer : %s", err.Error())
 	}
+	p.log.Debugf("Decrypted file to %s", plainTextFile)
+
 	return
 }
 
@@ -157,6 +167,7 @@ func (p provider) decryptArmoredKey(fileName string, password string) (*openpgp.
 
 //keyFromFile load from fil
 func (p provider) keyFromFile(fileName string) (*openpgp.Entity, error) {
+
 	f, err := os.Open(fileName)
 	if err != nil {
 		return nil, err
