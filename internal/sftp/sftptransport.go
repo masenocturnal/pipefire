@@ -423,10 +423,11 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	//remoteFile, err := client.Create(remotePath)
 	remoteFile, err := client.OpenFile(remotePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
 	if err != nil {
-		c.log.Errorf("Unable to create file %s", err.Error())
+		c.log.Errorf("Unable to create file %s , %s", remotePath, err.Error())
 		// do we close the connection here ?
 		return xfer, err
 	}
+	defer remoteFile.Close()
 	xfer.RemoteFileName = remoteFile.Name()
 
 	// write the bytes to the remote file _and_ the hash writer at the same time
@@ -453,6 +454,7 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 			xfer.RemoteSize = remoteFileInfo.Size()
 		}
 	*/
+
 	c.log.Debug("Transferred")
 	return xfer, err
 }
