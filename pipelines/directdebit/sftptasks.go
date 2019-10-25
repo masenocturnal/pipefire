@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
 
 	"github.com/masenocturnal/pipefire/internal/sftp"
 )
@@ -75,6 +76,7 @@ func (p pipeline) sftpToSafe(conf SftpConfig) (err error) {
 		return
 	}
 
+	var sb strings.Builder
 	for _, file := range filesInDir {
 		sftp, e := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, p.log)
 		if e != nil {
@@ -89,8 +91,8 @@ func (p pipeline) sftpToSafe(conf SftpConfig) (err error) {
 			p.log.Errorf("Unable to Send File to %s Error: %s ", conf.Sftp.Host, err.Error())
 		}
 		result, _ := json.MarshalIndent(confirmation, "", " ")
-		p.log.Info(string(result))
-
+		sb.WriteString(string(result))
+		p.log.Info(sb.String())
 		sftp.Close()
 	}
 
@@ -119,10 +121,15 @@ func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 		return fmt.Errorf("Error Sending files to %s ", conf.RemoteDir)
 	}
 
+	var sb strings.Builder
 	for temp := confirmations.Front(); temp != nil; temp = temp.Next() {
 		result, _ := json.MarshalIndent(temp.Value, "", " ")
-		p.log.Info(string(result))
+		sb.WriteString(string(result))
 	}
+	p.log.Info(sb.String())
+
+	// list the remote dir
+	sftp.ListRemoteDir(conf.RemoteDir)
 
 	p.log.Infof("sftpTo Complete, remote %s ", conf.RemoteDir)
 	return nil
