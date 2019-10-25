@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/sftp"
 	log "github.com/sirupsen/logrus"
@@ -29,7 +30,9 @@ type Endpoint struct {
 //FileTransferConfirmation is a summmary of the transferred file
 type FileTransferConfirmation struct {
 	LocalFileName    string
+	LocalPath        string
 	RemoteFileName   string
+	RemotePath       string
 	LocalSize        int64
 	LocalHash        string
 	RemoteSize       int64
@@ -365,6 +368,7 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	}
 	xfer.LocalFileName = localFileInfo.Name()
 	xfer.LocalSize = localFileInfo.Size()
+	xfer.LocalPath = localPath
 
 	// ensure we can read the local file first before we create the remote file
 	data, err := ioutil.ReadFile(localPath)
@@ -387,33 +391,26 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 
 	// see if the remote file exists..
 	p, err := client.Stat(remotePath)
-	c.log.Debugf("Stat %s , %v", remotePath, p)
+	c.log.Debugf("Stat %s ", remotePath)
 	if err != nil {
 		c.log.Debugf("Remote file %s doesn't exist", remotePath)
-		// return xfer, fmt.Errorf("Can't stat %s : %s  ", remotePath, err.Error())
 	}
-	c.log.Debugf("%v %s", p, p)
+
 	if p != nil {
-		remotePath = filepath.Join(remotePath, localFileInfo.Name())
-		c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
 		if p.IsDir() {
+			remotePath = filepath.Join(remotePath, localFileInfo.Name())
 			c.log.Debugf("Is dir %s ", remotePath)
 		} else {
 			fileMode := p.Mode()
-			c.log.Debugf("Mode is regular : %v, %s", fileMode.IsRegular(), fileMode.String())
+			if fileMode.IsRegular() {
+				c.log.Debugf("%s is a regular file : ", fileMode.String())
+			} else {
+				remotePath = filepath.Join(remotePath, localFileInfo.Name())
+				c.log.Debugf("Mode something else : %v, %s", fileMode.IsRegular(), fileMode.String())
+			}
 		}
-
-		// 	// write into the directory with file name
-		// 	remotePath = filepath.Join(remotePath, localFileInfo.Name())
-		// 	c.log.Debugf("Writing to remote server %s: %s ", c.Name, remotePath)
-		// } else {
-		// 	// file exists already...replace ?
-		// 	err = fmt.Errorf("remote %s a file which already exists", remotePath)
-		// 	c.log.Debugf(err.Error())
-		// 	return xfer, err
-		// }
 	} else {
-		err = fmt.Errorf("remote %s a file which already exists", remotePath)
+		err = fmt.Errorf("remote %s is either a file or you do not have permission", remotePath)
 		c.log.Debugf(err.Error())
 		return xfer, err
 	}
@@ -427,8 +424,9 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 		// do we close the connection here ?
 		return xfer, err
 	}
-	defer remoteFile.Close()
+
 	xfer.RemoteFileName = remoteFile.Name()
+	xfer.RemotePath = remotePath
 
 	// write the bytes to the remote file _and_ the hash writer at the same time
 	// @todo use TeeReader ?
@@ -436,24 +434,29 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 
 	// actually write the packets
 	transferredBytes, err := multiwriter.Write(data)
-	xfer.TransferredBytes = int64(transferredBytes)
-	xfer.TransferredHash = hex.EncodeToString(hashWriter.Sum(nil))
-	xfer.RemoteSize = xfer.TransferredBytes
 
+	// close the connection
+	err = remoteFile.Close()
 	if err != nil {
+		c.log.Debug("File successfully closed on the remote end", remotePath, err.Error())
 		c.log.Errorf("Error writing %s. Error: %s", remotePath, err.Error())
+		c.log.Error("File DID NOT TRANSFER.", remotePath, err.Error())
+	} else {
+		xfer.TransferredBytes = int64(transferredBytes)
+		xfer.TransferredHash = hex.EncodeToString(hashWriter.Sum(nil))
+		xfer.RemoteSize = xfer.TransferredBytes
 	}
+
 	// sometimes SFTP Servers will lock or whisk away the file after the
 	// file handle has closed
-	/*
-		// I think some sftp servers have issues with this
-		remoteFileInfo, err := client.Stat(remotePath)
-		if err != nil {
-			c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
-		} else {
-			xfer.RemoteSize = remoteFileInfo.Size()
-		}
-	*/
+	// I think some sftp servers have issues with this
+	remoteFileInfo, err := client.Stat(remotePath)
+	if err != nil {
+		c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
+	} else {
+
+		xfer.RemoteSize = remoteFileInfo.Size()
+	}
 
 	c.log.Debug("Transferred")
 	return xfer, err
@@ -469,9 +472,14 @@ func (c transport) ListRemoteDir(remoteDir string) error {
 	if err != nil {
 		return err
 	}
+
+	c.log.Infof("Listing Remote directory %s after transfer", remoteDir)
+	var sb strings.Builder
 	for _, file := range w {
-		fmt.Println(file.Name())
+
+		sb.WriteString(file.Name() + "\n")
 	}
+	c.log.Info(sb.String())
 	return err
 }
 
@@ -491,7 +499,8 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	// make sure what we have is a directory and it's accessible
 	localDir, err := os.Stat(srcDir)
 	if err != nil {
-		errorList.PushFront(err)
+
+		errorList.PushFront(fmt.Errorf("Unable to read local directory %s ", srcDir))
 		return
 	}
 
@@ -509,14 +518,25 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 		return
 	}
 
-	// try and make the directory if it doesn't exist
-	err = client.MkdirAll(destDir)
+	// see if directory exist
+	rdir, err := client.Stat(destDir)
 	if err != nil {
-		// It's been reported that some sftp servers fail on this however it could just
-		// be because the directory already exists
-		c.log.Warnf("Unable to create remote directory: %s Error: %s", destDir, err.Error())
-		// errorList.PushFront(fmt.Errorf()
-		// return
+		c.log.Warnf("Directory: %s doesn't exist. We will try to make the directory", destDir)
+	}
+
+	if rdir == nil {
+		// try and make the directory if it doesn't exist
+		err = client.MkdirAll(destDir)
+		if err != nil {
+
+			// It's been reported that some sftp servers fail on this however it could just
+			// be because the directory already exists
+			// @todo see
+			c.log.Debugf("Failed trying to MkdirAll: %s", destDir)
+			c.log.Warnf("Unable to create remote directory: %s Error: %s", destDir, err.Error())
+			errorList.PushFront(err)
+			return
+		}
 	}
 
 	// only read it there is something to read
