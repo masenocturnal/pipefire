@@ -62,85 +62,132 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 
 	// @todo config validation
 	// @todo turn into loop
-	p.log.Info("GetFilesFromBFP Start")
-	bfpSftp := config.Tasks.GetFilesFromBFP
-	if bfpSftp.Enabled {
-		if err := p.sftpGet(bfpSftp); err != nil {
-			errorList = append(errorList, err)
-			p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
-			return errorList
-		}
-		p.log.Info("GetFilesFromBFP Complete")
-	} else {
-		p.log.Info("GetFilesFromBFP Skipped")
+	if err := p.getFilesFromBFP(config); err != nil {
+		// we need the files from the BFP otherwise there is no point
+		return append(errorList, err)
 	}
 
-	p.log.Info("CleanBFP Start")
-	bfpClean := config.Tasks.CleanBFP
-	if bfpClean.Enabled {
-		if err := p.sftpClean(bfpClean); err != nil {
-			errorList = append(errorList, err)
-			p.log.Warningf("Unable to clean remote dir %s", err.Error())
-		}
-	} else {
-		p.log.Info("CleanBFP Skipped")
+	if err := p.cleanBFP(config); err != nil {
+		// not a big deal if cleaning fails..we can clean it up after
+		errorList = append(errorList, err)
 	}
 
-	p.log.Info("EncryptFiles Start")
-	encryptionConfig := config.Tasks.EncryptFiles
-	if encryptionConfig.Enabled {
-		if err := p.encryptFiles(encryptionConfig); err != nil {
-
-			for _, e := range err {
-				errorList = append(errorList, e)
-			}
-			p.log.Error("Unable to encrypt all files..Aborting")
-			return errorList
-		}
-		p.log.Info("SftpFilesToANZ Complete")
-	} else {
-		p.log.Info("SftpFilesToANZ Skipped")
+	if err := p.encrypteFiles(config); err != nil {
+		// We need all the files encrypted
+		// before we continue further
+		return err
 	}
 
-	p.log.Info("SftpFilesToANZ Start")
-	anzSftp := config.Tasks.SftpFilesToANZ
-	if anzSftp.Enabled {
-		if err := p.sftpTo(anzSftp); err != nil {
-			errorList = append(errorList, err)
-		}
-
-		p.log.Info("SftpFilesToANZ Complete")
-	} else {
-		p.log.Info("SftpFilesToANZ Skipped")
+	if err := p.sftpFilesToANZ(config); err != nil {
+		errorList = append(errorList, err)
 	}
 
-	p.log.Info("SftpFilesToPx Start")
-	pxSftp := config.Tasks.SftpFilesToPx
-	if pxSftp.Enabled {
-		if err := p.sftpTo(pxSftp); err != nil {
-			errorList = append(errorList, err)
-		}
-		p.log.Info("SftpFilesToPx Complete")
-	} else {
-		p.log.Info("SftpFilesToPx Skipped")
+	if err := p.sftpFilesToPx(config); err != nil {
+		errorList = append(errorList, err)
 	}
 
-	p.log.Info("SftpFilesToBNZ Start")
-	bnzSftp := config.Tasks.SftpFilesToBNZ
-	if bnzSftp.Enabled {
-		if err := p.sftpTo(bnzSftp); err != nil {
-			errorList = append(errorList, err)
-		}
-		p.log.Info("SftpFilesToBNZ Complete")
-	} else {
-		p.log.Info("SftpFilesToBNZ Skipped")
+	if err := p.sftpFilesToBNZ(config); err != nil {
+		errorList = append(errorList, err)
 	}
 
 	if len(errorList) > 0 {
-		p.log.Warn("Finished DD Pipeline with Errors")
+		p.log.Error("Finished DD Pipeline with Errors")
 	} else {
 		p.log.Info("Finished DD Pipeline Without Errors")
 	}
 
 	return errorList
+}
+
+func (p pipeline) getFilesFromBFP(config *Config) error {
+
+	p.log.Info("GetFilesFromBFP Start")
+	bfpSftp := config.Tasks.GetFilesFromBFP
+	if bfpSftp.Enabled {
+		if err := p.sftpGet(bfpSftp); err != nil {
+			p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
+			return err
+		}
+		p.log.Info("GetFilesFromBFP Complete")
+		return nil
+	}
+	p.log.Warn("GetFilesFromBFP Skipped")
+
+	return nil
+}
+
+func (p pipeline) cleanBFP(config *Config) error {
+
+	p.log.Info("CleanBFP Start")
+	bfpClean := config.Tasks.CleanBFP
+	if bfpClean.Enabled {
+		if err := p.sftpClean(bfpClean); err != nil {
+			p.log.Warningf("Unable to clean remote dir %s", err.Error())
+			return err
+		}
+		return nil
+	}
+	p.log.Warn("CleanBFP Skipped")
+	return nil
+}
+
+func (p pipeline) encrypteFiles(config *Config) []error {
+	p.log.Info("EncryptFiles Start")
+	encryptionConfig := config.Tasks.EncryptFiles
+	if encryptionConfig.Enabled {
+		if err := p.encryptFiles(encryptionConfig); err != nil {
+			p.log.Error("Unable to encrypt all files..Aborting")
+			return err
+		}
+		p.log.Info("SftpFilesToANZ Complete")
+		return nil
+	}
+	p.log.Warn("SftpFilesToANZ Skipped")
+	return nil
+}
+
+func (p pipeline) sftpFilesToANZ(config *Config) error {
+	p.log.Info("SftpFilesToANZ Start")
+	anzSftp := config.Tasks.SftpFilesToANZ
+	if anzSftp.Enabled {
+		if err := p.sftpTo(anzSftp); err != nil {
+			return err
+		}
+		p.log.Info("SftpFilesToANZ Complete")
+		return nil
+	}
+	p.log.Warn("SftpFilesToANZ Skipped")
+
+	return nil
+}
+
+func (p pipeline) sftpFilesToPx(config *Config) error {
+	p.log.Info("SftpFilesToPx Start")
+	pxSftp := config.Tasks.SftpFilesToPx
+	if pxSftp.Enabled {
+		if err := p.sftpTo(pxSftp); err != nil {
+			return err
+		}
+		p.log.Info("SftpFilesToPx Complete")
+		return nil
+	}
+	p.log.Warn("SftpFilesToPx Skipped")
+
+	return nil
+}
+
+func (p pipeline) sftpFilesToBNZ(config *Config) error {
+	p.log.Info("SftpFilesToBNZ Start")
+
+	bnzSftp := config.Tasks.SftpFilesToBNZ
+	if bnzSftp.Enabled {
+		if err := p.sftpTo(bnzSftp); err != nil {
+			return err
+		}
+		p.log.Info("SftpFilesToBNZ Complete")
+		return nil
+	}
+
+	p.log.Warn("SftpFilesToBNZ Skipped")
+	return nil
 }

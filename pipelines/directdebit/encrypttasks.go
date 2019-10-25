@@ -62,6 +62,14 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 		errList = append(errList, errors.New(msg))
 	}
 
+	// [sysam@sec-docker-101 BNZ]$ gpg2 --verbose -u "Certegy BNZ (FTG-PROD)" -r "BNZConnect (FTG-PROD)" --openpgp --sign --output "${fileName}.gpg"  --encrypt "$fileName"
+	// gpg: using PGP trust model
+	// gpg: using subkey 92715549 instead of primary key 18FC3718
+	// gpg: This key probably belongs to the named user
+	// gpg: writing to `158042884DD.191025.011946.238011.CON.gpg'
+	// gpg: ELG/AES256 encrypted for: "92715549 BNZConnect (FTG-PROD) <BNZConnect@bnz.co.nz>"
+	// gpg: RSA/SHA1 signature from: "6383B673 Certegy BNZ (FTG-PROD)"
+
 	bank = "bnz"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if bnzProviderConfig, ok := config.Providers[bank]; ok {
