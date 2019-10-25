@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -64,8 +66,14 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	p.log.Debugf("Output file %s", outputFile)
 	p.log.Debugf("Using EncryptionKey %s ", p.config.EncryptionKey)
 
+	var recipientKey *openpgp.Entity
 	// Read in public key
-	recipientKey, err := p.keyFromFile(p.config.EncryptionKey)
+	if strings.Contains(p.config.EncryptionKey, "bnz") {
+		recipientKey, err = p.keyFromFile(p.config.EncryptionKey, true)
+	} else {
+		recipientKey, err = p.keyFromFile(p.config.EncryptionKey, false)
+	}
+
 	if err != nil {
 		return
 	}
@@ -79,7 +87,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
 		} else {
 
-			signingKey, err = p.keyFromFile(p.config.SigningKey)
+			signingKey, err = p.keyFromFile(p.config.SigningKey, false)
 			if err != nil {
 				return err
 			}
@@ -110,6 +118,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		IsBinary: true,
 	}
 	// @todo currently uses defaults, provide other encryption options
+
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
 	if err != nil {
 		return err
@@ -170,7 +179,7 @@ func (p provider) decryptArmoredKey(fileName string, password string) (*openpgp.
 }
 
 //keyFromFile load from fil
-func (p provider) keyFromFile(fileName string) (*openpgp.Entity, error) {
+func (p provider) keyFromFile(fileName string, subkeyWorkAround bool) (*openpgp.Entity, error) {
 
 	f, err := os.Open(fileName)
 	if err != nil {
@@ -182,5 +191,39 @@ func (p provider) keyFromFile(fileName string) (*openpgp.Entity, error) {
 		return nil, fmt.Errorf("Unable to read the Signing Key. Make sure it's ASCII Armoured (not binary): %s", err.Error())
 	}
 
+	if subkeyWorkAround {
+		return readEntityWithoutExpiredSubkeys(packet.NewReader(block.Body))
+	}
 	return openpgp.ReadEntity(packet.NewReader(block.Body))
+}
+
+// workaround for https://github.com/golang/go/issues/15353
+func readEntityWithoutExpiredSubkeys(packets *packet.Reader) (entity *openpgp.Entity, err error) {
+	var p packet.Packet
+	var q []packet.Packet
+
+	for {
+		p, err = packets.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		switch pkt := p.(type) {
+		case *packet.Signature:
+			if pkt.SigType == packet.SigTypeSubkeyBinding && pkt.KeyExpired(time.Now()) {
+				continue
+			}
+		}
+
+		q = append(q, p)
+	}
+
+	for i := range q {
+		packets.Unread(q[len(q)-1-i])
+	}
+
+	entity, err = openpgp.ReadEntity(packets)
+
+	return
 }
