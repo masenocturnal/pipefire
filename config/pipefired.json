@@ -10,6 +10,9 @@
                 "database": "asd",
                 "timeout": ""
             },
+            "transferLog": {
+                "table": "FileTransfers"
+            },
             "tasks": {
                 "getFilesFromBFP": {
                     "remoteDir": "./Pickup",

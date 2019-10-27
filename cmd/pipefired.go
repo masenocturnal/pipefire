@@ -56,15 +56,19 @@ func main() {
 		"correlationId": correlationID,
 	})
 
-	// create the dd pipeline
-	directDebitPipeline := directdebit.New(correlationID.String(), logEntry)
-
 	// @todo make this dynamic
 	ddConfig := hostConfig.Pipelines.DirectDebit
 
+	// create the dd pipeline
+	directDebitPipeline, err := directdebit.New(&ddConfig, logEntry)
+	if err != nil {
+		log.Error(err.Error())
+	}
+	defer directDebitPipeline.Close()
+
 	// @todo load and execute pipelines concurrently
 	// execute pipeline
-	pipelineErrors := directDebitPipeline.Execute(&ddConfig)
+	pipelineErrors := directDebitPipeline.Execute()
 
 	// err = executePipelines(conf)
 	if pipelineErrors != nil && len(pipelineErrors) > 0 {
