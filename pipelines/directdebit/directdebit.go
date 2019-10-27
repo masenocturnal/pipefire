@@ -1,12 +1,18 @@
 package directdebit
 
 import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	xferlog "github.com/masenocturnal/pipefire/pipelines/directdebit/lib"
 	log "github.com/sirupsen/logrus"
 )
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	Execute(config *Config) []error
+	Execute() (errorList []error)
+	Close() error
 	sftpGet(conf SftpConfig) error
 	encryptFiles(config EncryptFilesConfig) (err []error)
 	sftpTo(conf SftpConfig) error
@@ -24,69 +30,77 @@ type Tasks struct {
 
 // Config defines the required arguements for the pipeline
 type Config struct {
-	Database DbConnection `json:"database"`
-	Tasks    Tasks        `json:"tasks"`
-}
-
-// DbConnection stores connection information for the database
-type DbConnection struct {
-	// @todo pull from config
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Host     string `json:"host"`
-	Name     string `json:"name"`
-	Timeout  string `json:"timeout"`
+	Database xferlog.DbConfig `json:"database"`
+	Tasks    Tasks            `json:"tasks"`
 }
 
 type pipeline struct {
 	log           *log.Entry
 	correlationID string
-	DbConnection  DbConnection
-	taskConfig    Config
+	transferlog   xferlog.TransferLog
+	taskConfig    *Config
 }
 
 // New Pipeline
-func New(correlationID string, log *log.Entry) Pipeline {
+func New(config *Config, log *log.Entry) (Pipeline, error) {
 
-	pipeline := &pipeline{
-		log:           log,
-		correlationID: correlationID,
+	dbConfig := config.Database
+
+	redact := func(r rune) rune {
+		return '*'
 	}
 
-	return pipeline
+	redactedPw := strings.Map(redact, dbConfig.Password)
+
+	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.Username, redactedPw, dbConfig.Host)
+
+	connectionString := fmt.Sprintf("%s:%s@/%s", dbConfig.Username, dbConfig.Password, dbConfig.Host)
+	db, err := sql.Open("mysql", connectionString)
+	if err != nil {
+		return nil, err
+	}
+
+	pipeline := &pipeline{
+		taskConfig:  config,
+		log:         log,
+		transferlog: xferlog.NewTransferLog(db, log),
+	}
+
+	return pipeline, err
 }
 
-func (p pipeline) Execute(config *Config) (errorList []error) {
+// Execute starts the execution of the pipeline
+func (p pipeline) Execute() (errorList []error) {
 
 	p.log.Info("Starting Direct Debit Pipeline")
 
 	// @todo config validation
 	// @todo turn into loop
-	if err := p.getFilesFromBFP(config); err != nil {
+	if err := p.getFilesFromBFP(p.taskConfig); err != nil {
 		// we need the files from the BFP otherwise there is no point
 		return append(errorList, err)
 	}
 
-	if err := p.cleanBFP(config); err != nil {
+	if err := p.cleanBFP(p.taskConfig); err != nil {
 		// not a big deal if cleaning fails..we can clean it up after
 		errorList = append(errorList, err)
 	}
 
-	if err := p.encrypteFiles(config); err != nil {
+	if err := p.encrypteFiles(p.taskConfig); err != nil {
 		// We need all the files encrypted
 		// before we continue further
 		return err
 	}
 
-	if err := p.sftpFilesToANZ(config); err != nil {
+	if err := p.sftpFilesToANZ(p.taskConfig); err != nil {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.sftpFilesToPx(config); err != nil {
+	if err := p.sftpFilesToPx(p.taskConfig); err != nil {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.sftpFilesToBNZ(config); err != nil {
+	if err := p.sftpFilesToBNZ(p.taskConfig); err != nil {
 		errorList = append(errorList, err)
 	}
 
@@ -97,6 +111,10 @@ func (p pipeline) Execute(config *Config) (errorList []error) {
 	}
 
 	return errorList
+}
+
+func (p pipeline) Close() error {
+	return p.transferlog.Close()
 }
 
 func (p pipeline) getFilesFromBFP(config *Config) error {
