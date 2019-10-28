@@ -4,11 +4,10 @@
     "pipelines": {
         "directdebit": {
             "database": {
-                "user": "asdf",
-                "host":"asdf",
-                "password": "asdf",
-                "database": "asd",
-                "timeout": ""
+                "user": "pipefire",
+                "addr": "172.26.0.2",
+                "passwd": "foobar123",
+                "dbname": "pipefire"
             },
             "transferLog": {
                 "table": "FileTransfers"

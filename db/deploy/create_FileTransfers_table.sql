@@ -1,15 +1,22 @@
-CREATE TABLE `FileTransfers` (
-    `process_start` DATETIME NOT NULL COMMENT 'Date and time transfer process was started',
-    `process_errors` TEXT COMMENT 'Any errors detected in processing the file',
-    `process_end` DATETIME COMMENT 'Date and time transfer process ended',
-    `file_name` TINYTEXT NOT NULL COMMENT 'Name of the file being transferred',
-    `file_recipient` TINYTEXT NOT NULL COMMENT 'Place that the file is being transferred to',
-    `file_key` TEXT COMMENT 'Fingerprint of the key used to encrypt the file',
-    `file_sender` TINYTEXT NOT NULL COMMENT 'Name of the machine that is sending the file',
-    `hash_plaintext` VARCHAR(254) NOT NULL COMMENT 'Hash of the file on disk before encryption',
-    `hash_ciphertext` TEXT COMMENT 'Hash of the file on disk after encryption',
-    `hash_remote` TEXT COMMENT 'Hash of the file after upload to recipient',
-     PRIMARY KEY(`hash_plaintext`)
-) Engine=InnoDb;
 
-ALTER DATABASE FileTransfers CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE `DirectDebitPipeline` (
+    `local_file_name` TEXT NOT NULL COMMENT 'The name of the file on disk',
+    `local_file_path` TEXT NOT NULL COMMENT 'Absolute path to the file on the disk',
+    `local_file_size` INT COMMENT 'On Disk File size',
+    `remote_file_name` TExT COMMENT 'Name of the Remote file',
+    `remote_file_path` TEXT NOT NULL COMMENT 'Path to the remote file',
+    `remote_file_size` INT COMMENT 'Remote File size',
+    `recipient_name`   TEXT COMMENT 'Natural language name for the recipient ie. Bank, Customer',
+    `sender_name`      TEXT COMMENT 'Name of the sender',
+    `local_file_hash`  VARCHAR(254) UNIQUE COMMENT 'Local File Hash',
+    `transferred_file_hash` VARCHAR(254) COMMENT 'Hash of the transferred bytes',
+    `local_host_id`    TEXT NOT NULL COMMENT 'Host identifier of the local system',
+    `remote_host`      TEXT NOT NULL COMMENT 'Host identifier of the remote system',
+    `transfer_start`   DATETIME NOT NULL COMMENT 'Date and time transfer process started',
+    `transfer_end`     DATETIME COMMENT 'Date and time transfer process started',
+    `transfer_errors`  TEXT COMMENT 'Transfer Errors',
+    PRIMARY KEY(`local_file_hash`) USING HASH    
+    
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+
+
