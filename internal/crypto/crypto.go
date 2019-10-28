@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -21,6 +20,7 @@ func init() {
 	// we need to register this for the ANZ key.
 	// this is deprecated but hopefully people make newer keys
 	crypto.RegisterHash(crypto.RIPEMD160, ripemd160.New)
+	crypto.RegisterHash(crypto.SHA1, crypto.SHA1.New)
 }
 
 //ProviderConfig is an instance of the SFTP Connection Details
@@ -44,6 +44,21 @@ type provider struct {
 	log    *log.Entry
 }
 
+// func main() {
+// 	config := &ProviderConfig {
+// 		EncryptionKey: "/path/to/public/encryptionKey",
+// 		SigningKey: "/path/to/private_signing_key"
+// 	}
+// 	entry := log.WithFields("correlationID": "uniqueid")
+// 	provider := NewProvider(config, entry)
+
+// 	//doesn't support globbing yet sorry
+// 	pathOfFileToEncrypt := "/tmp/file.txt"
+// 	if err := provider.EncryptFile(pathOfFileToEncrypt, "/tmp"); err != nil {
+// 		log.Error(err.Error())
+// 	}
+// }
+
 //NewProvider returns a Crypto Provider
 func NewProvider(config ProviderConfig, log *log.Entry) Provider {
 
@@ -65,13 +80,8 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	p.log.Debugf("Output file %s", outputFile)
 	p.log.Debugf("Using EncryptionKey %s ", p.config.EncryptionKey)
 
-	var recipientKey *openpgp.Entity
 	// Read in public key
-	if strings.Contains(p.config.EncryptionKey, "bnz") {
-		recipientKey, err = p.keyFromFile(p.config.EncryptionKey, true)
-	} else {
-		recipientKey, err = p.keyFromFile(p.config.EncryptionKey, false)
-	}
+	recipientKey, err := p.keyFromFile(p.config.EncryptionKey, false)
 
 	if err != nil {
 		return
@@ -85,7 +95,6 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		if len(p.config.SigningKeyPassword) > 0 {
 			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
 		} else {
-
 			signingKey, err = p.keyFromFile(p.config.SigningKey, false)
 			if err != nil {
 				return err
@@ -112,13 +121,18 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 
 	p.log.Debug("Performing Encryption ")
-	//config := &packet.Config{}
+
 	hints := &openpgp.FileHints{
 		IsBinary: true,
 	}
-	// @todo currently uses defaults, provide other encryption options
 
-	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, nil)
+	// create new default 
+	packet := &packet.Config{
+		DefaultHash: crypto.SHA1,
+	}
+
+	// @todo currently uses defaults, should we provide other encryption options?
+	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, packet)
 	if err != nil {
 		return err
 	}

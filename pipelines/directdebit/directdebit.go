@@ -2,9 +2,9 @@ package directdebit
 
 import (
 	"database/sql"
-	"fmt"
 	"strings"
 
+	mysql "github.com/go-sql-driver/mysql"
 	xferlog "github.com/masenocturnal/pipefire/pipelines/directdebit/lib"
 	log "github.com/sirupsen/logrus"
 )
@@ -30,8 +30,8 @@ type Tasks struct {
 
 // Config defines the required arguements for the pipeline
 type Config struct {
-	Database xferlog.DbConfig `json:"database"`
-	Tasks    Tasks            `json:"tasks"`
+	Database mysql.Config `json:"database"`
+	Tasks    Tasks        `json:"tasks"`
 }
 
 type pipeline struct {
@@ -50,11 +50,16 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		return '*'
 	}
 
-	redactedPw := strings.Map(redact, dbConfig.Password)
+	redactedPw := strings.Map(redact, dbConfig.Passwd)
 
-	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.Username, redactedPw, dbConfig.Host)
+	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
 
-	connectionString := fmt.Sprintf("%s:%s@/%s", dbConfig.Username, dbConfig.Password, dbConfig.Host)
+	if err := mysql.SetLogger(log); err {
+		return nil, err
+	}
+
+	// connectionString := fmt.Sprintf("%s:%s@/%s", dbConfig.Username, dbConfig.Password, dbConfig.Host)
+	connectionString := config.Database.FormatDSN()
 	db, err := sql.Open("mysql", connectionString)
 	if err != nil {
 		return nil, err
@@ -63,7 +68,7 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 	pipeline := &pipeline{
 		taskConfig:  config,
 		log:         log,
-		transferlog: xferlog.NewTransferLog(db, log),
+		transferlog: xferlog.New(db, log),
 	}
 
 	return pipeline, err
@@ -165,7 +170,9 @@ func (p pipeline) encrypteFiles(config *Config) []error {
 }
 
 func (p pipeline) sftpFilesToANZ(config *Config) error {
+
 	p.log.Info("SftpFilesToANZ Start")
+	p.transferlog.Start()
 	anzSftp := config.Tasks.SftpFilesToANZ
 	if anzSftp.Enabled {
 		if err := p.sftpTo(anzSftp); err != nil {
