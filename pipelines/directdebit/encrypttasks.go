@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
 
 	"github.com/masenocturnal/pipefire/internal/crypto"
@@ -16,6 +18,52 @@ type EncryptFilesConfig struct {
 	OutputDir string                           `json:"outputDir"`
 	Providers map[string]crypto.ProviderConfig `json:"providers"`
 	Enabled   bool                             `json:"enabled"`
+}
+
+func (p pipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir string, outputDir string) (errList []error) {
+	p.log.Infof("Attempting to Encrypt files in %s using the CLI", srcDir)
+	//gpg2 -u "Certegy BNZ (FTG-PROD)" -r "BNZConnect (FTG-PROD)" --openpgp --sign --output "./BNZ_SEND/${fileName}.gpg"  --encrypt "$fileName"
+
+	files, err := ioutil.ReadDir(srcDir)
+
+	if err != nil {
+		return append(errList, err)
+	}
+
+	if len(config.SigningFingerPrint) < 1 || len(config.FingerPrint) < 1 {
+		x := fmt.Errorf("The fingerprint for the signing key : %s or the encryption key: %s is empty", config.SigningFingerPrint, config.FingerPrint)
+		return append(errList, x)
+	}
+
+	for _, file := range files {
+		srcFile := path.Join(srcDir, file.Name())
+		destFile := path.Join(outputDir, file.Name())
+		args := []string{
+			fmt.Sprintf("-u %s", config.SigningFingerPrint),
+			fmt.Sprintf("-r %s", config.FingerPrint),
+			"--openpgp",
+			"--sign",
+			fmt.Sprintf("--output %s.gpg", destFile),
+			fmt.Sprintf("--encrypt %s", srcFile),
+		}
+		cmd := &exec.Cmd{
+			Path:   "/usr/bin/gpg2",
+			Args:   args,
+			Env:    nil,
+			Dir:    ".",
+			Stdout: os.Stdout,
+			Stderr: os.Stderr,
+		}
+
+		err := cmd.Run()
+		if err != nil {
+			p.log.Errorf("Unable to execute GPG task %s ", err.Error())
+			return append(errList, err)
+		}
+	}
+
+	p.log.Debug("PGP Encryption Task Complete")
+	return
 }
 
 func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
@@ -65,10 +113,10 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 	bank = "bnz"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if bnzProviderConfig, ok := config.Providers[bank]; ok {
-		bnzCryptoProvider := crypto.NewProvider(bnzProviderConfig, p.log)
+		//bnzCryptoProvider := crypto.NewProvider(bnzProviderConfig, p.log)
 		srcDir := filepath.Join(config.SrcDir, "BNZ")
 		outputDir := filepath.Join(config.OutputDir, "BNZ")
-		err := p.encryptFilesInDir(bnzCryptoProvider, srcDir, outputDir)
+		err := p.pgpCLIEncryptFilesInDir(bnzProviderConfig, srcDir, outputDir)
 		if err != nil {
 			for _, e := range err {
 				errList = append(errList, e)

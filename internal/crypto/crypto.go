@@ -26,6 +26,7 @@ type ProviderConfig struct {
 	EncryptionKey         string `json:"encryptionKey"`
 	SigningKey            string `json:"signingKey"`
 	SigningKeyPassword    string `json:"signingKeyPassword"`
+	SigningFingerPrint    string `json:"signingFingerPrint"`
 	FingerPrint           string `json:"fingerprint"`
 	EncryptionKeyPassword string `json:"encryptionKeyPassword"`
 	DecryptionKey         string `json:"decryptionKey"`
