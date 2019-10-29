@@ -1,12 +1,12 @@
 package crypto
 
 import (
+	"compress/zlib"
 	"crypto"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -20,7 +20,6 @@ func init() {
 	// we need to register this for the ANZ key.
 	// this is deprecated but hopefully people make newer keys
 	crypto.RegisterHash(crypto.RIPEMD160, ripemd160.New)
-	crypto.RegisterHash(crypto.SHA1, crypto.SHA1.New)
 }
 
 //ProviderConfig is an instance of the SFTP Connection Details
@@ -44,21 +43,6 @@ type provider struct {
 	config ProviderConfig
 	log    *log.Entry
 }
-
-// func main() {
-// 	config := &ProviderConfig {
-// 		EncryptionKey: "/path/to/public/encryptionKey",
-// 		SigningKey: "/path/to/private_signing_key"
-// 	}
-// 	entry := log.WithFields("correlationID": "uniqueid")
-// 	provider := NewProvider(config, entry)
-
-// 	//doesn't support globbing yet sorry
-// 	pathOfFileToEncrypt := "/tmp/file.txt"
-// 	if err := provider.EncryptFile(pathOfFileToEncrypt, "/tmp"); err != nil {
-// 		log.Error(err.Error())
-// 	}
-// }
 
 //NewProvider returns a Crypto Provider
 func NewProvider(config ProviderConfig, log *log.Entry) Provider {
@@ -95,21 +79,31 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		p.log.Debugf("Signing with %s", p.config.SigningKey)
 		if len(p.config.SigningKeyPassword) > 0 {
 			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
+			if err != nil {
+				return err
+			}
+
 		} else {
 			signingKey, err = p.keyFromFile(p.config.SigningKey, false)
 			if err != nil {
 				return err
 			}
+
+			// canSign := signingKey.PrivateKey.CanSign()
+			// p.log.Debugf("Ok to sign ? %s ", canSign)
+
+			// canSign = signingKey.PrimaryKey.CanSign()
+			// p.log.Debugf("Ok to sign pub ? %s ", canSign)
+
+			// for x, y := range signingKey.Identities {
+			// 	p.log.Debugf("X is : %s ", x)
+			// 	p.log.Debugf("Y is : %s ", y)
+
+			// }
 		}
 
 		p.log.Debug("Signing key loaded ")
 	}
-
-	// do we need to do this ?
-	// compressed, err := gzip.NewWriterLevel(plain, gzip.BestCompression)
-	// kingpin.FatalIfError(err, "Invalid compression level")
-
-	// n, err := io.Copy(compressed, os.Stdin)
 
 	inFile, err := os.Open(plainTextFile)
 	if err != nil {
@@ -125,11 +119,14 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 
 	hints := &openpgp.FileHints{
 		IsBinary: true,
+		FileName: "",
 	}
 
-	// create new default 
+	// create new default
 	packet := &packet.Config{
-		DefaultHash: crypto.SHA1,
+		DefaultHash:            crypto.SHA1,
+		DefaultCompressionAlgo: packet.CompressionZIP,
+		DefaultCipher:          packet.CipherAES256,
 	}
 
 	// @todo currently uses defaults, should we provide other encryption options?
@@ -137,13 +134,22 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	if err != nil {
 		return err
 	}
+	zipWriter := zlib.NewWriter(wc)
 
-	bytes, err := io.Copy(wc, inFile)
+	bytes, err := io.Copy(zipWriter, inFile)
 	if err != nil {
-		p.log.Errorf("Error Copying : %s", err.Error())
+		p.log.Errorf("Error Copying to the zipwriter : %s", err.Error())
 		return err
 	}
 
+	// end the compression stream
+	err = zipWriter.Close()
+	if err != nil {
+		p.log.Errorf("Error Closing zipWriter : %s", err.Error())
+		return err
+	}
+
+	// close the encrypted text
 	err = wc.Close()
 	if err != nil {
 		p.log.Errorf("Error Closing pgp writer : %s", err.Error())
@@ -205,39 +211,5 @@ func (p provider) keyFromFile(fileName string, subkeyWorkAround bool) (*openpgp.
 		return nil, fmt.Errorf("Unable to read the Signing Key. Make sure it's ASCII Armoured (not binary): %s", err.Error())
 	}
 
-	if subkeyWorkAround {
-		return readEntityWithoutExpiredSubkeys(packet.NewReader(block.Body))
-	}
 	return openpgp.ReadEntity(packet.NewReader(block.Body))
-}
-
-// workaround for https://github.com/golang/go/issues/15353
-func readEntityWithoutExpiredSubkeys(packets *packet.Reader) (entity *openpgp.Entity, err error) {
-	var p packet.Packet
-	var q []packet.Packet
-
-	for {
-		p, err = packets.Next()
-
-		if err == io.EOF {
-			break
-		}
-
-		switch pkt := p.(type) {
-		case *packet.Signature:
-			if pkt.SigType == packet.SigTypeSubkeyBinding && pkt.KeyExpired(time.Now()) {
-				continue
-			}
-		}
-
-		q = append(q, p)
-	}
-
-	for i := range q {
-		packets.Unread(q[len(q)-1-i])
-	}
-
-	entity, err = openpgp.ReadEntity(packets)
-
-	return
 }

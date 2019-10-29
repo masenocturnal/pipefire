@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/masenocturnal/pipefire/internal/sftp"
 )
@@ -78,6 +80,7 @@ func (p pipeline) sftpToSafe(conf SftpConfig) (err error) {
 
 	var sb strings.Builder
 	for _, file := range filesInDir {
+
 		sftp, e := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, p.log)
 		if e != nil {
 			p.log.Errorf("Unable to connect to %s Error: %s ", conf.Sftp.Host, e.Error())
@@ -105,12 +108,19 @@ func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 	p.log.Infof("Begin sftpTo: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
 
+	// Record the files we are about to send so that we can ensure we never
+	// send the same file twice
+	if err := p.recordFilesToSend(conf.LocalDir, conf.Sftp.Host); err != nil {
+		return err
+	}
+
 	sftp, err := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, p.log)
 	if err != nil {
 		return
 	}
-
 	defer sftp.Close()
+
+	// we want to examine each of these files to ensure they haven't been sent before
 
 	confirmations, errors := sftp.SendDir(conf.LocalDir, conf.RemoteDir)
 	if errors.Len() > 0 {
@@ -132,5 +142,46 @@ func (p pipeline) sftpTo(conf SftpConfig) (err error) {
 	sftp.ListRemoteDir(conf.RemoteDir)
 
 	p.log.Infof("sftpTo Complete, remote %s ", conf.RemoteDir)
+	return nil
+}
+
+func (p pipeline) recordFilesToSend(localDir string, remoteHost string) error {
+	// Record the files in the database so we can
+	// guard against sending them twice
+	// start the transaction
+	tx := p.transferlog.Conn.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// list all the files ine
+	filesInDir, err := ioutil.ReadDir(localDir)
+	if err != nil {
+		return err
+	}
+
+	if len(filesInDir) < 1 {
+		p.log.Warnf("No files to send in %s", localDir)
+		return fmt.Errorf("%s is empty", localDir)
+	}
+
+	hostName, _ := os.Hostname()
+
+	for _, file := range filesInDir {
+
+		// add the record to the transferlog
+		record := &Record{
+			LocalFileName: file.Name(),
+			RemoteHost:    remoteHost,
+			LocalHostID:   hostName,
+			TransferStart: time.Now(),
+			CorrelationID: p.correlationID,
+		}
+
+		p.transferlog.Create(tx, record)
+
+	}
 	return nil
 }

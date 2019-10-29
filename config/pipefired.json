@@ -5,7 +5,8 @@
         "directdebit": {
             "database": {
                 "user": "pipefire",
-                "addr": "172.26.0.2",
+                "net": "tcp",
+                "address": "172.26.0.2:3306",
                 "passwd": "foobar123",
                 "dbname": "pipefire"
             },

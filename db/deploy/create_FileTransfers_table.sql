@@ -1,5 +1,6 @@
 
-CREATE TABLE `DirectDebitPipeline` (
+
+CREATE TABLE `TransferRecord` (
     `local_file_name` TEXT NOT NULL COMMENT 'The name of the file on disk',
     `local_file_path` TEXT NOT NULL COMMENT 'Absolute path to the file on the disk',
     `local_file_size` INT COMMENT 'On Disk File size',
@@ -15,7 +16,10 @@ CREATE TABLE `DirectDebitPipeline` (
     `transfer_start`   DATETIME NOT NULL COMMENT 'Date and time transfer process started',
     `transfer_end`     DATETIME COMMENT 'Date and time transfer process started',
     `transfer_errors`  TEXT COMMENT 'Transfer Errors',
-    PRIMARY KEY(`local_file_hash`) USING HASH    
+    `correlation_id`    VARCHAR(254) COMMENT 'CorrelationId',
+    PRIMARY KEY(`local_file_hash`) USING HASH,
+    UNIQUE(local_file_name,remote_host),
+    UNIQUE(correlation_id)
     
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
 

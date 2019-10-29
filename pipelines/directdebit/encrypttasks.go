@@ -90,6 +90,7 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 	// @todo this could be cleaner there is a bit of code duplication here
 	// loop through directories
 	// GA goes to ANZ
+
 	var bank string = "anz"
 	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
 	if anzProviderConfig, ok := config.Providers[bank]; ok {

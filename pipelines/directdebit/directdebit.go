@@ -1,11 +1,10 @@
 package directdebit
 
 import (
-	"database/sql"
 	"strings"
 
 	mysql "github.com/go-sql-driver/mysql"
-	xferlog "github.com/masenocturnal/pipefire/pipelines/directdebit/lib"
+	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -37,7 +36,7 @@ type Config struct {
 type pipeline struct {
 	log           *log.Entry
 	correlationID string
-	transferlog   xferlog.TransferLog
+	transferlog   *TransferLog
 	taskConfig    *Config
 }
 
@@ -54,13 +53,12 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 
 	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
 
-	if err := mysql.SetLogger(log); err {
+	if err := mysql.SetLogger(log); err != nil {
 		return nil, err
 	}
 
-	// connectionString := fmt.Sprintf("%s:%s@/%s", dbConfig.Username, dbConfig.Password, dbConfig.Host)
 	connectionString := config.Database.FormatDSN()
-	db, err := sql.Open("mysql", connectionString)
+	db, err := gorm.Open("mysql", connectionString)
 	if err != nil {
 		return nil, err
 	}
@@ -68,10 +66,10 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 	pipeline := &pipeline{
 		taskConfig:  config,
 		log:         log,
-		transferlog: xferlog.New(db, log),
+		transferlog: NewRecorder(db, log),
 	}
 
-	return pipeline, err
+	return pipeline, nil
 }
 
 // Execute starts the execution of the pipeline
@@ -119,7 +117,8 @@ func (p pipeline) Execute() (errorList []error) {
 }
 
 func (p pipeline) Close() error {
-	return p.transferlog.Close()
+	// NoOp
+	return nil
 }
 
 func (p pipeline) getFilesFromBFP(config *Config) error {
@@ -172,7 +171,7 @@ func (p pipeline) encrypteFiles(config *Config) []error {
 func (p pipeline) sftpFilesToANZ(config *Config) error {
 
 	p.log.Info("SftpFilesToANZ Start")
-	p.transferlog.Start()
+
 	anzSftp := config.Tasks.SftpFilesToANZ
 	if anzSftp.Enabled {
 		if err := p.sftpTo(anzSftp); err != nil {
