@@ -44,17 +44,19 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 		Providers: providers,
 		Enabled:   true,
 	}
+
+	tasksConfig := &Tasks{
+		EncryptFiles: *encryptConfig,
+	}
 	logEntry := log.WithField("test", "test")
 
 	ddConfig := &Config{}
-	ddConfig.Tasks = &Tasks{
-		EncryptFiles: encryptConfig,
-	}
+	ddConfig.Tasks = *tasksConfig
 
-	pipeline := New(config, logEntry)
+	pipeline, err := New(ddConfig, logEntry)
 
-	err := pipeline.encryptFiles(*ddConfig)
-	if err != nil {
+	errs := pipeline.encryptFiles(ddConfig)
+	if len(errs) > 0 {
 		t.Error(err)
 	}
 }

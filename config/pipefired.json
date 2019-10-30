@@ -18,22 +18,21 @@
                     "remoteDir": "./Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "localhost",
+                        "host": "10.130.24.139",
                         "key": "",
                         "username": "andmas",
-                        "password": "",
+                        "password": "Koolu350D!",
                         "keyPassword": "",
-                        "port": 22
+                        "port": 3389
                     },
-                    "enabled": false
+                    "enabled": true
                 },
-                "encryptFiles": 
-                { 
+                "encryptFiles": { 
                     "srcDir": "/tmp/ddrun/Pickup/",
                     "outputDir": "/tmp/ddrun/Encrypted",
                     "providers" : {
                         "anz": {
-                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/anz.pub",
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
@@ -41,7 +40,7 @@
                             "decryptionKey": ""
                         },
                         "px": {
-                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/px.pub",
+                            "encryptionKey": "/home/andmas/keys/public/px.pub",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
@@ -49,31 +48,34 @@
                             "decryptionKey": ""
                         },
                         "bnz": {
-                            "encryptionKey": "/media/andmas/USB03/DDKeys/keys/public/bnz.pub",
+                            "encryptionKey": "/home/andmas/keys/px/PX_UAT_GPG_PUB.asc",
                             "fingerprint": "",
                             "signingKey": "",
                             "signingKeyPassword": "",
+                            "signingFingerPrint": "",
                             "encryptionKeyPassword": "",
                             "decryptionKey": ""
                         }
-                    }
+                    },
+                    "enabled": true
                 },
                 "sftpFilesToANZ": {
-                    "fromDir": "/tmp/ddrun/Encrypted/ANZ",
-                    "toDir": "/Out/Certegy/DE/",
+                    "localDir": "/tmp/ddrun/Encrypted/ANZ",
+                    "remoteDir": "./Out/Certegy/DE/",
+
                     "sftp": {
-                        "host": "10.130.72.213",
-                        "key": "/home/andmas/Nextcloud/Certegy/ssh/id_rsa",
-                        "username": "certegy",
-                        "password": "",
+                        "host": "10.130.24.139",
+                        "key": "",
+                        "username": "andmas",
+                        "password": "Koolu350D!",
                         "keyPassword": "",
-                        "port": 22
+                        "port": 3389
                     },
-                    "enabled": "false"                    
+                    "enabled": false
                 },
                 "sftpFilesToPx": {
                     "fromDir": "/tmp/ddrun/Encrypted/PX",
-                    "toDir": "/In",
+                    "toDir": "./In",
                     "sftp": {
                         "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
                         "key": "/home/andmas/.ssh/build-host.cer",
@@ -82,11 +84,11 @@
                         "keyPassword": "",
                         "port": 22
                     },
-                    "enabled": "false"
+                    "enabled": false
                 },
                 "sftpFilesToBNZ": {
                     "fromDir": "/tmp/ddrun/Encrypted/BNZ",
-                    "toDir": "/from",
+                    "toDir": "./from",
                     "sftp": {
                         "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
                         "key": "/home/andmas/.ssh/build-host.cer",
@@ -95,7 +97,7 @@
                         "keyPassword": "",
                         "port": 22
                     },
-                    "enabled": "false"
+                    "enabled": false
                 }
             }        
         }

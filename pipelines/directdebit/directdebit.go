@@ -13,7 +13,7 @@ type Pipeline interface {
 	Execute() (errorList []error)
 	Close() error
 	sftpGet(conf SftpConfig) error
-	encryptFiles(config EncryptFilesConfig) (err []error)
+	encryptFiles(con *Config) (err []error)
 	sftpTo(conf SftpConfig) error
 }
 
@@ -33,7 +33,7 @@ type Config struct {
 	Tasks    Tasks        `json:"tasks"`
 }
 
-type pipeline struct {
+type ddPipeline struct {
 	log           *log.Entry
 	correlationID string
 	transferlog   *TransferLog
@@ -57,31 +57,31 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		return nil, err
 	}
 
-	var pipeline pipeline
-	if config.Database != nil {
-		connectionString := config.Database.FormatDSN()
-		db, err := gorm.Open("mysql", connectionString)
-		if err != nil {
-			return nil, err
-		}
-
-		pipeline = &pipeline{
-			taskConfig:  config,
-			log:         log,
-			transferlog: NewRecorder(db, log),
-		}
-	} else {
-		pipeline = &pipeline{
-			taskConfig: config,
-			log:        log,
-		}
+	// var p ddPipeline
+	// if config.Database {
+	connectionString := config.Database.FormatDSN()
+	db, err := gorm.Open("mysql", connectionString)
+	if err != nil {
+		return nil, err
 	}
 
-	return pipeline, nil
+	p := &ddPipeline{
+		taskConfig:  config,
+		log:         log,
+		transferlog: NewRecorder(db, log),
+	}
+	// } else {
+	// pipeline = &pipeline{
+	// 	taskConfig: config,
+	// 	log:        log,
+	// }
+	// }
+
+	return p, nil
 }
 
 // Execute starts the execution of the pipeline
-func (p pipeline) Execute() (errorList []error) {
+func (p ddPipeline) Execute() (errorList []error) {
 
 	p.log.Info("Starting Direct Debit Pipeline")
 
@@ -97,7 +97,7 @@ func (p pipeline) Execute() (errorList []error) {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.encrypteFiles(p.taskConfig); err != nil {
+	if err := p.encryptFiles(p.taskConfig); err != nil {
 		// We need all the files encrypted
 		// before we continue further
 		return err
@@ -124,12 +124,12 @@ func (p pipeline) Execute() (errorList []error) {
 	return errorList
 }
 
-func (p pipeline) Close() error {
+func (p ddPipeline) Close() error {
 	// NoOp
 	return nil
 }
 
-func (p pipeline) getFilesFromBFP(config *Config) error {
+func (p ddPipeline) getFilesFromBFP(config *Config) error {
 
 	p.log.Info("GetFilesFromBFP Start")
 	bfpSftp := config.Tasks.GetFilesFromBFP
@@ -146,7 +146,7 @@ func (p pipeline) getFilesFromBFP(config *Config) error {
 	return nil
 }
 
-func (p pipeline) cleanBFP(config *Config) error {
+func (p ddPipeline) cleanBFP(config *Config) error {
 
 	p.log.Info("CleanBFP Start")
 	bfpClean := config.Tasks.CleanBFP
@@ -161,22 +161,22 @@ func (p pipeline) cleanBFP(config *Config) error {
 	return nil
 }
 
-func (p pipeline) encrypteFiles(config *Config) []error {
+func (p ddPipeline) encryptFiles(config *Config) []error {
 	p.log.Info("EncryptFiles Start")
 	encryptionConfig := config.Tasks.EncryptFiles
 	if encryptionConfig.Enabled {
-		if err := p.encryptFiles(encryptionConfig); err != nil {
+		if err := p.pgpEncryptFilesForBank(encryptionConfig); err != nil {
 			p.log.Error("Unable to encrypt all files..Aborting")
 			return err
 		}
-		p.log.Info("SftpFilesToANZ Complete")
+		p.log.Info("Encrypt Files Complete")
 		return nil
 	}
-	p.log.Warn("SftpFilesToANZ Skipped")
+	p.log.Warn("Encrypt Files Skipped")
 	return nil
 }
 
-func (p pipeline) sftpFilesToANZ(config *Config) error {
+func (p ddPipeline) sftpFilesToANZ(config *Config) error {
 
 	p.log.Info("SftpFilesToANZ Start")
 
@@ -193,7 +193,7 @@ func (p pipeline) sftpFilesToANZ(config *Config) error {
 	return nil
 }
 
-func (p pipeline) sftpFilesToPx(config *Config) error {
+func (p ddPipeline) sftpFilesToPx(config *Config) error {
 	p.log.Info("SftpFilesToPx Start")
 	pxSftp := config.Tasks.SftpFilesToPx
 	if pxSftp.Enabled {
@@ -208,7 +208,7 @@ func (p pipeline) sftpFilesToPx(config *Config) error {
 	return nil
 }
 
-func (p pipeline) sftpFilesToBNZ(config *Config) error {
+func (p ddPipeline) sftpFilesToBNZ(config *Config) error {
 	p.log.Info("SftpFilesToBNZ Start")
 
 	bnzSftp := config.Tasks.SftpFilesToBNZ

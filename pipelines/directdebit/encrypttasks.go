@@ -21,7 +21,7 @@ type EncryptFilesConfig struct {
 	Enabled   bool                             `json:"enabled"`
 }
 
-func (p pipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir string, outputDir string) (errList []error) {
+func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir string, outputDir string) (errList []error) {
 	p.log.Infof("Attempting to Encrypt files in %s using the CLI", srcDir)
 	//gpg2 -u "Certegy BNZ (FTG-PROD)" -r "BNZConnect (FTG-PROD)" --openpgp --sign --output "./BNZ_SEND/${fileName}.gpg"  --encrypt "$fileName"
 
@@ -84,7 +84,7 @@ func (p pipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir s
 	return
 }
 
-func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
+func (p ddPipeline) pgpEncryptFilesForBank(config EncryptFilesConfig) (errList []error) {
 	p.log.Infof("Attempting to Encrypt files in %s", config.SrcDir)
 
 	// @todo this could be cleaner there is a bit of code duplication here
@@ -160,7 +160,7 @@ func (p pipeline) encryptFiles(config EncryptFilesConfig) (errList []error) {
 }
 
 //encryptFilesInDir encrypt all the files in the directory with the given provider
-func (p pipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir string, outputDir string) (errorList []error) {
+func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir string, outputDir string) (errorList []error) {
 	fileList, err := ioutil.ReadDir(srcDir)
 	if err != nil {
 		return append(errorList, err)
