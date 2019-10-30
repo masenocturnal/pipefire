@@ -21,7 +21,8 @@
                         "password": "",
                         "keyPassword": "",
                         "port": 22
-                    }
+                    },
+                    "enabled": false
                 },
                 "encryptFiles": 
                 { 
@@ -64,7 +65,8 @@
                         "password": "",
                         "keyPassword": "",
                         "port": 22
-                    }
+                    },
+                    "enabled": "false"                    
                 },
                 "sftpFilesToPx": {
                     "fromDir": "/tmp/ddrun/Encrypted/PX",
@@ -76,7 +78,8 @@
                         "password": "",
                         "keyPassword": "",
                         "port": 22
-                    }
+                    },
+                    "enabled": "false"
                 },
                 "sftpFilesToBNZ": {
                     "fromDir": "/tmp/ddrun/Encrypted/BNZ",
@@ -88,7 +91,8 @@
                         "password": "",
                         "keyPassword": "",
                         "port": 22
-                    }
+                    },
+                    "enabled": "false"
                 }
             }        
         }
