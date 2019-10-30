@@ -57,16 +57,24 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		return nil, err
 	}
 
-	connectionString := config.Database.FormatDSN()
-	db, err := gorm.Open("mysql", connectionString)
-	if err != nil {
-		return nil, err
-	}
+	var pipeline pipeline
+	if config.Database != nil {
+		connectionString := config.Database.FormatDSN()
+		db, err := gorm.Open("mysql", connectionString)
+		if err != nil {
+			return nil, err
+		}
 
-	pipeline := &pipeline{
-		taskConfig:  config,
-		log:         log,
-		transferlog: NewRecorder(db, log),
+		pipeline = &pipeline{
+			taskConfig:  config,
+			log:         log,
+			transferlog: NewRecorder(db, log),
+		}
+	} else {
+		pipeline = &pipeline{
+			taskConfig: config,
+			log:        log,
+		}
 	}
 
 	return pipeline, nil
