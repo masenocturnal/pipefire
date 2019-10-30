@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/masenocturnal/pipefire/internal/crypto"
 )
@@ -35,27 +36,44 @@ func (p pipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir s
 		return append(errList, x)
 	}
 
+	if err := os.MkdirAll(outputDir, 0700); err != nil {
+		return append(errList, err)
+	}
+
+	var cmdOut []byte
+
 	for _, file := range files {
 		srcFile := path.Join(srcDir, file.Name())
-		destFile := path.Join(outputDir, file.Name())
+		destFile := path.Join(outputDir, file.Name()+".gpg")
+
+		cmd := "/usr/bin/gpg2"
 		args := []string{
-			fmt.Sprintf("-u %s", config.SigningFingerPrint),
-			fmt.Sprintf("-r %s", config.FingerPrint),
+			"-u",
+			config.SigningFingerPrint,
+			"-r",
+			config.FingerPrint,
 			"--openpgp",
 			"--sign",
-			fmt.Sprintf("--output %s.gpg", destFile),
-			fmt.Sprintf("--encrypt %s", srcFile),
+			"--batch",
+			"--yes",
+			"--output",
+			destFile,
+			"--encrypt",
+			srcFile,
 		}
-		cmd := &exec.Cmd{
-			Path:   "/usr/bin/gpg2",
-			Args:   args,
-			Env:    nil,
-			Dir:    ".",
-			Stdout: os.Stdout,
-			Stderr: os.Stderr,
-		}
+		p.log.Info(strings.Join(args, " "))
+		if cmdOut, err = exec.Command(cmd, args...).Output(); err != nil {
+			x := err.(*exec.ExitError)
 
-		err := cmd.Run()
+			p.log.Warn("Ensure that the GPG key is trusted otherwise you may encounter an assurance error")
+			p.log.Errorf("Error executing command: %s Error: %s", cmd, err.Error())
+			p.log.Errorf("Error: %s", x.Stderr)
+
+			return append(errList, err)
+		}
+		out := string(cmdOut)
+		p.log.Debug(out)
+
 		if err != nil {
 			p.log.Errorf("Unable to execute GPG task %s ", err.Error())
 			return append(errList, err)

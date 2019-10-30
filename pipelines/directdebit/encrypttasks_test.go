@@ -16,14 +16,16 @@ func TestGPGCLIEncryptFiles(t *testing.T) {
 	providers["bnz"] = *providerConfig
 
 	config := &EncryptFilesConfig{
-		SrcDir:    "/home/andmas/tmp/Pickup/",
-		OutputDir: "/home/andmas/tmp/Pickup/",
+		SrcDir:    "/tmp/ddrun/Pickup/",
+		OutputDir: "/tmp/ddrun/Encrypted2/",
 		Providers: providers,
 		Enabled:   true,
 	}
 	logEntry := log.WithField("test", "test")
 	pipeline := New("030c0eb8-883d-41c4-a220-57ee1ad49b11", logEntry)
 
-	pipeline.encryptFiles(*config)
-	// pipeline.pgpCLIEncryptFiles(providerConfig, config.SrcDir, config.OutputDir)
+	err := pipeline.encryptFiles(*config)
+	if err != nil {
+		t.Error(err)
+	}
 }
