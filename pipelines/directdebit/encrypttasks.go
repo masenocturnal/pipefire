@@ -37,9 +37,9 @@ func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir
 	}
 
 	if err := os.MkdirAll(outputDir, 0700); err != nil {
-		return append(errList, err)
 	}
 
+	return append(errList, err)
 	var cmdOut []byte
 
 	for _, file := range files {

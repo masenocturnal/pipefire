@@ -1,7 +1,6 @@
 package crypto
 
 import (
-	"compress/zlib"
 	"crypto"
 	"errors"
 	"fmt"
@@ -9,7 +8,6 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
-
 	"golang.org/x/crypto/openpgp"
 	"golang.org/x/crypto/openpgp/armor"
 	"golang.org/x/crypto/openpgp/packet"
@@ -122,33 +120,22 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		FileName: "",
 	}
 
+	// compConfig := &packet.CompressionConfig{
+	// 	Level: packet.DefaultCompression,
+	// }
 	// create new default
-	packet := &packet.Config{
+	packConfig := &packet.Config{
 		DefaultHash:            crypto.SHA1,
-		DefaultCompressionAlgo: packet.CompressionZIP,
-		DefaultCipher:          packet.CipherAES256,
+		DefaultCompressionAlgo: packet.CompressionZLIB,
 	}
 
 	// @todo currently uses defaults, should we provide other encryption options?
-	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, packet)
+	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, packConfig)
 	if err != nil {
 		return err
 	}
-	zipWriter := zlib.NewWriter(wc)
 
-	bytes, err := io.Copy(zipWriter, inFile)
-	if err != nil {
-		p.log.Errorf("Error Copying to the zipwriter : %s", err.Error())
-		return err
-	}
-
-	// end the compression stream
-	err = zipWriter.Close()
-	if err != nil {
-		p.log.Errorf("Error Closing zipWriter : %s", err.Error())
-		return err
-	}
-
+	bytes, err := io.Copy(wc, inFile)
 	// close the encrypted text
 	err = wc.Close()
 	if err != nil {
