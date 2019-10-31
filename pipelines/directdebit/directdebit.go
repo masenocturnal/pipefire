@@ -43,39 +43,41 @@ type ddPipeline struct {
 // New Pipeline
 func New(config *Config, log *log.Entry) (Pipeline, error) {
 
-	dbConfig := config.Database
+	var p *ddPipeline
 
-	redact := func(r rune) rune {
-		return '*'
+	if config.Database.Addr != "" {
+		dbConfig := config.Database
+
+		redact := func(r rune) rune {
+			return '*'
+		}
+
+		redactedPw := strings.Map(redact, dbConfig.Passwd)
+
+		log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
+
+		if err := mysql.SetLogger(log); err != nil {
+			return nil, err
+		}
+
+		// if config.Database {
+		connectionString := config.Database.FormatDSN()
+		db, err := gorm.Open("mysql", connectionString)
+		if err != nil {
+			return nil, err
+		}
+
+		p = &ddPipeline{
+			taskConfig:  config,
+			log:         log,
+			transferlog: NewRecorder(db, log),
+		}
+	} else {
+		p = &ddPipeline{
+			taskConfig: config,
+			log:        log,
+		}
 	}
-
-	redactedPw := strings.Map(redact, dbConfig.Passwd)
-
-	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
-
-	if err := mysql.SetLogger(log); err != nil {
-		return nil, err
-	}
-
-	// var p ddPipeline
-	// if config.Database {
-	connectionString := config.Database.FormatDSN()
-	db, err := gorm.Open("mysql", connectionString)
-	if err != nil {
-		return nil, err
-	}
-
-	p := &ddPipeline{
-		taskConfig:  config,
-		log:         log,
-		transferlog: NewRecorder(db, log),
-	}
-	// } else {
-	// pipeline = &pipeline{
-	// 	taskConfig: config,
-	// 	log:        log,
-	// }
-	// }
 
 	return p, nil
 }

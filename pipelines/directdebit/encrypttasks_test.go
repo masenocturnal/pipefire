@@ -54,6 +54,9 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 	ddConfig.Tasks = *tasksConfig
 
 	pipeline, err := New(ddConfig, logEntry)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	errs := pipeline.encryptFiles(ddConfig)
 	if len(errs) > 0 {
