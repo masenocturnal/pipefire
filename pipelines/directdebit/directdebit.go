@@ -10,7 +10,7 @@ import (
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	Execute() (errorList []error)
+	Execute(correlationID string) (errorList []error)
 	Close() error
 	sftpGet(conf SftpConfig) error
 	encryptFiles(con *Config) (err []error)
@@ -47,6 +47,7 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 
 	if config.Database.Addr != "" {
 		dbConfig := config.Database
+		dbConfig.ParseTime = true
 
 		redact := func(r rune) rune {
 			return '*'
@@ -61,7 +62,7 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		}
 
 		// if config.Database {
-		connectionString := config.Database.FormatDSN()
+		connectionString := dbConfig.FormatDSN()
 		db, err := gorm.Open("mysql", connectionString)
 		if err != nil {
 			return nil, err
@@ -83,7 +84,8 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 }
 
 // Execute starts the execution of the pipeline
-func (p ddPipeline) Execute() (errorList []error) {
+func (p ddPipeline) Execute(correlationID string) (errorList []error) {
+	p.correlationID = correlationID
 
 	p.log.Info("Starting Direct Debit Pipeline")
 
@@ -118,16 +120,18 @@ func (p ddPipeline) Execute() (errorList []error) {
 	}
 
 	if len(errorList) > 0 {
-		p.log.Error("Finished DD Pipeline with Errors")
+		p.log.Error("END DD Pipeline with Errors")
 	} else {
-		p.log.Info("Finished DD Pipeline Without Errors")
+		p.log.Info("END DD Pipeline Without Errors")
 	}
 
 	return errorList
 }
 
 func (p ddPipeline) Close() error {
-	// NoOp
+	if err := p.transferlog.Conn.Close(); err != nil {
+		p.log.Warningf("Error closing database connecton, %s", err.Error())
+	}
 	return nil
 }
 

@@ -11,28 +11,34 @@ import (
 // TransferRecorder provides a mechanism to update the transfer status
 type TransferRecorder interface {
 	Create(txn *gorm.DB, rec *Record) error
-	FileSent(hash string, remoteHost string) (bool, error)
+	FileAlreadySent(txn *gorm.DB, localFileHash string, remoteHost string) (bool, error)
 	// Close() error
+}
+
+//TableName sets the table name to TransferRecord
+func (Record) TableName() string {
+	return "TransferRecord"
 }
 
 //Record Maps to a row in the FileTransfers table
 type Record struct {
-	LocalFileName      string
-	LocalFilePath      string
-	LocalFileSize      uint
-	RemoteFileName     string
-	RemoteFilePath     string
-	RemoteFileSize     uint
-	RecipientName      string
-	SenderName         string
-	LocalFileHash      string
-	TransferedFileHash string
-	LocalHostID        string
-	RemoteHost         string
-	TransferStart      time.Time
-	TransferEnd        time.Time
-	TransferErrors     string
-	CorrelationID      string
+	gorm.Model
+	LocalFileName       string
+	LocalFilePath       string
+	LocalFileSize       int64
+	RemoteFileName      string
+	RemoteFilePath      string
+	RemoteFileSize      int64
+	RecipientName       string
+	SenderName          string
+	LocalFileHash       string
+	TransferredFileHash string
+	LocalHostID         string
+	RemoteHost          string
+	TransferStart       time.Time
+	TransferEnd         time.Time
+	TransferErrors      string
+	CorrelationID       string
 }
 
 //TransferLog Stores a database log
@@ -59,7 +65,6 @@ func (t TransferLog) Create(txn *gorm.DB, rec *Record) error {
 	}
 
 	if err := txn.Create(rec).Error; err != nil {
-		txn.Rollback()
 		return err
 	}
 	return nil
@@ -75,16 +80,32 @@ func (t TransferLog) GetRecordByFileName(fileName string) {
 
 }
 
-//FileSent Determines if a file has been
-func (t TransferLog) FileSent(hash string, remoteHost string) (bool, error) {
-
-	return true, nil
+//FileAlreadySent Determines if a file has been
+func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost string) (bool, error) {
+	var rec Record
+	err := txn.Where("local_file_hash = ? and remote_host = ? and deleted_at IS NULL", hash, remoteHost).First(&rec).Error
+	t.log.Debugf("remote File size %d", rec.RemoteFileSize)
+	t.log.Debugf("remote FileName %s", rec.RemoteFileName)
+	t.log.Debugf("remote Hash %s", rec.TransferredFileHash)
+	return (rec.RemoteFileSize > 0 || rec.RemoteFileName != "" || rec.TransferredFileHash != ""), err
 }
 
-// //Close Closes the underlying connection
-// func (t TransferLog) Close() (err error) {
-// 	if err = t.Conn.Close(); err != nil {
-// 		t.log.Error("Error closing database connection: %s", err.Error())
-// 	}
-// 	return err
-// }
+//RecordError Updates the transfer record in the database to record the error message
+func (t TransferLog) RecordError(txn *gorm.DB, hash string, remoteHost string, errorMsg string) error {
+	var rec Record
+	if err := txn.Model(&rec).Update("TransferErrors", errorMsg).Error; err != nil {
+		t.log.Error(err.Error())
+		return err
+	}
+	return nil
+}
+
+// Update updates the record
+func (t TransferLog) Update(txn *gorm.DB, rec *Record) error {
+
+	if err := txn.Model(rec).Updates(rec).Error; err != nil {
+		t.log.Error(err.Error())
+		return err
+	}
+	return nil
+}
