@@ -1,6 +1,7 @@
 
-
-CREATE TABLE `TransferRecord` (
+DROP TABLE IF EXISTS TransferRecord;
+CREATE TABLE TransferRecord (
+	`id` int AUTO_INCREMENT  PRIMARY KEY,
     `local_file_name` TEXT NOT NULL COMMENT 'The name of the file on disk',
     `local_file_path` TEXT NOT NULL COMMENT 'Absolute path to the file on the disk',
     `local_file_size` INT COMMENT 'On Disk File size',
@@ -17,10 +18,14 @@ CREATE TABLE `TransferRecord` (
     `transfer_end`     DATETIME COMMENT 'Date and time transfer process started',
     `transfer_errors`  TEXT COMMENT 'Transfer Errors',
     `correlation_id`    VARCHAR(254) COMMENT 'CorrelationId',
-    PRIMARY KEY(`local_file_hash`) USING HASH,
+    `created_at`       DATETIME NOT NULL COMMENT "Date record was added",
+    `updated_at`       DATETIME COMMENT "Date record was updated",
+    `deleted_at`       DATETIME COMMENT "Date record was remoted",    
     UNIQUE(local_file_name,remote_host),
-    UNIQUE(correlation_id)
+    UNIQUE(local_file_name,correlation_id)
     
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+
+
 
 
