@@ -86,18 +86,6 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 			if err != nil {
 				return err
 			}
-
-			// canSign := signingKey.PrivateKey.CanSign()
-			// p.log.Debugf("Ok to sign ? %s ", canSign)
-
-			// canSign = signingKey.PrimaryKey.CanSign()
-			// p.log.Debugf("Ok to sign pub ? %s ", canSign)
-
-			// for x, y := range signingKey.Identities {
-			// 	p.log.Debugf("X is : %s ", x)
-			// 	p.log.Debugf("Y is : %s ", y)
-
-			// }
 		}
 
 		p.log.Debug("Signing key loaded ")
