@@ -6,9 +6,10 @@
             "database": {
                 "user": "pipefire",
                 "net": "tcp",
-                "address": "172.26.0.2:3306",
+                "addr": "172.18.0.2:3306",
                 "passwd": "foobar123",
-                "dbname": "pipefire"
+                "dbname": "pipefire",
+                "allowNativePasswords": true
             },
             "transferLog": {
                 "table": "FileTransfers"
@@ -25,7 +26,7 @@
                         "keyPassword": "",
                         "port": 3389
                     },
-                    "enabled": true
+                    "enabled": false
                 },
                 "encryptFiles": { 
                     "srcDir": "/tmp/ddrun/Pickup/",
@@ -57,7 +58,7 @@
                             "decryptionKey": ""
                         }
                     },
-                    "enabled": true
+                    "enabled": false
                 },
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
@@ -67,15 +68,15 @@
                         "host": "10.130.24.139",
                         "key": "",
                         "username": "andmas",
-                        "password": "Koolu350D!",
+                        "password": "",
                         "keyPassword": "",
                         "port": 3389
                     },
                     "enabled": false
                 },
                 "sftpFilesToPx": {
-                    "fromDir": "/tmp/ddrun/Encrypted/PX",
-                    "toDir": "./In",
+                    "localDir": "/tmp/ddrun/Encrypted/PX",
+                    "remoteDir": "./In",
                     "sftp": {
                         "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
                         "key": "/home/andmas/.ssh/build-host.cer",
@@ -87,17 +88,17 @@
                     "enabled": false
                 },
                 "sftpFilesToBNZ": {
-                    "fromDir": "/tmp/ddrun/Encrypted/BNZ",
-                    "toDir": "./from",
+                    "localDir": "/home/andmas/tmp/Pickup/BNZ",
+                    "remoteDir": "./from",
                     "sftp": {
-                        "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
-                        "key": "/home/andmas/.ssh/build-host.cer",
-                        "username": "ubuntu",
+                        "host": "localhost",
+                        "key": "",
+                        "username": "andmas",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
                     },
-                    "enabled": false
+                    "enabled": true
                 }
             }        
         }
