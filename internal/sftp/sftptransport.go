@@ -452,9 +452,8 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	// I think some sftp servers have issues with this
 	remoteFileInfo, err := client.Stat(remotePath)
 	if err != nil {
-		c.log.Printf("Error getting size of remote file after transfer, file may have been locked or moved ")
+		c.log.Warnf("Error getting size of remote file after transfer, file may have been locked or moved ")
 	} else {
-
 		xfer.RemoteSize = remoteFileInfo.Size()
 	}
 
