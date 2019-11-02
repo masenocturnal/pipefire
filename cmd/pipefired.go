@@ -68,15 +68,16 @@ func main() {
 
 	// @todo load and execute pipelines concurrently
 	// execute pipeline
-	pipelineErrors := directDebitPipeline.Execute()
+	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
 
 	// err = executePipelines(conf)
 	if pipelineErrors != nil && len(pipelineErrors) > 0 {
 		for _, err := range pipelineErrors {
 			log.Error(err.Error())
 		}
+		log.Info("Direct Debit Pipeline Complete with Errors")
 	} else {
-		log.Info("Direct Debit Pipeline Done")
+		log.Info("Direct Debit Pipeline Complete")
 	}
 }
 
