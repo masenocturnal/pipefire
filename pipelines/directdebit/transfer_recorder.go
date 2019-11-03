@@ -31,10 +31,10 @@ type Record struct {
 	RemoteFileSize      int64
 	RecipientName       string
 	SenderName          string
-	LocalFileHash       string
+	LocalFileHash       string `gorm:"primary_key"`
 	TransferredFileHash string
 	LocalHostID         string
-	RemoteHost          string
+	RemoteHost          string `gorm:"primary_key"`
 	TransferStart       time.Time
 	TransferEnd         time.Time
 	TransferErrors      string
@@ -83,17 +83,34 @@ func (t TransferLog) GetRecordByFileName(fileName string) {
 //FileAlreadySent Determines if a file has been
 func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost string) (bool, error) {
 	var rec Record
-	err := txn.Where("local_file_hash = ? and remote_host = ? and deleted_at IS NULL", hash, remoteHost).First(&rec).Error
-	t.log.Debugf("remote File size %d", rec.RemoteFileSize)
-	t.log.Debugf("remote FileName %s", rec.RemoteFileName)
-	t.log.Debugf("remote Hash %s", rec.TransferredFileHash)
-	return (rec.RemoteFileSize > 0 || rec.RemoteFileName != "" || rec.TransferredFileHash != ""), err
+	var myCount []int = make([]int, 1)
+	sql := fmt.Sprintf(`SELECT count(id) as noRecords
+		FROM %s
+		WHERE local_file_hash = ? and remote_host = ? and deleted_at IS NULL
+		AND (
+			remote_file_name <> '' 
+			AND  remote_file_size > 0 
+			AND (
+				transferred_file_hash IS NOT NULL 
+				OR transferred_file_hash <> ''
+			)
+		)`, rec.TableName())
+
+	err := txn.Raw(sql, hash, remoteHost).Pluck("noRecords", &myCount).Error
+	if err == nil && len(myCount) == 1 {
+		t.log.Debugf("%d records found", myCount[0])
+		y := (myCount[0] > 0)
+		return y, err
+	}
+	return false, err
 }
 
 //RecordError Updates the transfer record in the database to record the error message
 func (t TransferLog) RecordError(txn *gorm.DB, hash string, remoteHost string, errorMsg string) error {
-	var rec Record
-	if err := txn.Model(&rec).Update("TransferErrors", errorMsg).Error; err != nil {
+
+	sql := "WHERE local_file_hash = ? and remote_host = ? and deleted_at IS NULL"
+
+	if err := txn.Where(sql, hash, remoteHost).Update("TransferErrors", errorMsg).Error; err != nil {
 		t.log.Error(err.Error())
 		return err
 	}
@@ -103,9 +120,23 @@ func (t TransferLog) RecordError(txn *gorm.DB, hash string, remoteHost string, e
 // Update updates the record
 func (t TransferLog) Update(txn *gorm.DB, rec *Record) error {
 
-	if err := txn.Model(rec).Updates(rec).Error; err != nil {
+	sql := "local_file_hash = ? AND remote_host = ? AND correlation_id = ?"
+	result := txn.
+		Model(rec).
+		Where(sql, rec.LocalFileHash, rec.RemoteHost, rec.CorrelationID).
+		UpdateColumns(Record{
+			RemoteFileName:      rec.RemoteFileName,
+			RemoteFilePath:      rec.RemoteFilePath,
+			RemoteFileSize:      rec.RemoteFileSize,
+			TransferredFileHash: rec.TransferredFileHash,
+			TransferStart:       rec.TransferStart,
+			TransferEnd:         rec.TransferEnd,
+		})
+	if err := result.Error; err != nil {
+
 		t.log.Error(err.Error())
 		return err
 	}
+	t.log.Debugf("Rows Updated %d ", result.RowsAffected)
 	return nil
 }

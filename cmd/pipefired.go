@@ -63,6 +63,7 @@ func main() {
 	directDebitPipeline, err := directdebit.New(&ddConfig, logEntry)
 	if err != nil {
 		log.Error(err.Error())
+		os.Exit(1)
 	}
 	defer directDebitPipeline.Close()
 

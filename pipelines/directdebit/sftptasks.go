@@ -149,7 +149,8 @@ func (p ddPipeline) sftpTo(conf SftpConfig) (err error) {
 			// def don't want to send if we don't know if it's been sent.
 			return err
 		}
-		if val {
+
+		if val == true {
 			// don't transfer the file
 			p.log.Warnf("The file %s has already been sent. File will *NOT* be transferred ", cur)
 			tx.Rollback()
@@ -177,6 +178,8 @@ func (p ddPipeline) sftpTo(conf SftpConfig) (err error) {
 					TransferredFileHash: confirmation.TransferredHash,
 					TransferStart:       startTime,
 					TransferEnd:         time.Now(),
+					LocalFileHash:       confirmation.LocalHash,
+					CorrelationID:       p.correlationID,
 				}
 				if err := p.transferlog.Update(tx, rec); err != nil {
 					tx.RollbackUnlessCommitted()
@@ -187,15 +190,11 @@ func (p ddPipeline) sftpTo(conf SftpConfig) (err error) {
 				p.log.Warnf("Didn't receive file transfer confirmation for %s", cur)
 			}
 
-			// try and list the directory
-			sftp.ListRemoteDir(conf.RemoteDir)
-
 		}
-		//if p.transferlog.FileSent
-
 	}
 
-	// list the remote dir
+	// try and list the directory
+	sftp.ListRemoteDir(conf.RemoteDir)
 
 	p.log.Infof("sftpTo Complete, remote %s ", conf.RemoteDir)
 	return nil

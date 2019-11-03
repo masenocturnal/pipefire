@@ -10,4 +10,4 @@ services:
       MYSQL_PASSWORD: foobar123
       MYSQL_DATABASE: pipefire
     ports:
-      - 3306:3305
+      - 3306:3306

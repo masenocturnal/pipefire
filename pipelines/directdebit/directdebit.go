@@ -1,6 +1,7 @@
 package directdebit
 
 import (
+	"fmt"
 	"strings"
 
 	mysql "github.com/go-sql-driver/mysql"
@@ -65,8 +66,10 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		connectionString := dbConfig.FormatDSN()
 		db, err := gorm.Open("mysql", connectionString)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("Unable to connect to the database: %s", err.Error())
 		}
+		db.SetLogger(log)
+		db.LogMode(true)
 
 		p = &ddPipeline{
 			taskConfig:  config,

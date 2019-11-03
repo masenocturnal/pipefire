@@ -124,6 +124,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 
 	bytes, err := io.Copy(wc, inFile)
+
 	// close the encrypted text
 	err = wc.Close()
 	if err != nil {

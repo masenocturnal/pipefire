@@ -410,9 +410,13 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 			}
 		}
 	} else {
-		err = fmt.Errorf("remote %s is either a file or you do not have permission", remotePath)
-		c.log.Debugf(err.Error())
-		return xfer, err
+		c.log.Debugf("remote %s doesn't exist, attempting to create it", remotePath)
+
+		if err := client.MkdirAll(remotePath); err != nil {
+			c.log.Errorf("remote %s is either a file or you do not have permission, err : %s", remotePath, err.Error())
+			c.log.Debugf(err.Error())
+			return xfer, err
+		}
 	}
 
 	c.log.Debugf("Trying to create %s", remotePath)

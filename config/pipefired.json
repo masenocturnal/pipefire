@@ -6,8 +6,8 @@
             "database": {
                 "user": "pipefire",
                 "net": "tcp",
-                "addr": "172.18.0.2:3306",
-                "passwd": "foobar123",
+                "addr": "localhost:3306",
+                "passwd": "",
                 "dbname": "pipefire",
                 "allowNativePasswords": true
             },
@@ -19,7 +19,7 @@
                     "remoteDir": "./Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "10.130.24.139",
+                        "host": "",
                         "key": "",
                         "username": "andmas",
                         "password": "",
@@ -78,8 +78,8 @@
                     "localDir": "/tmp/ddrun/Encrypted/PX",
                     "remoteDir": "./In",
                     "sftp": {
-                        "host": "ec2-54-66-173-76.ap-southeast-2.compute.amazonaws.com",
-                        "key": "/home/andmas/.ssh/build-host.cer",
+                        "host": "",
+                        "key": "",
                         "username": "ubuntu",
                         "password": "",
                         "keyPassword": "",
@@ -88,12 +88,12 @@
                     "enabled": false
                 },
                 "sftpFilesToBNZ": {
-                    "localDir": "/home/andmas/tmp/Pickup/BNZ",
+                    "localDir": "/tmp/ddrun/Pickup/BNZ",
                     "remoteDir": "./from",
                     "sftp": {
                         "host": "localhost",
                         "key": "",
-                        "username": "andmas",
+                        "username": "am",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
