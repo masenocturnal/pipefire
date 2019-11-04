@@ -2,7 +2,7 @@
 DROP TABLE IF EXISTS TransferRecord;
 CREATE TABLE TransferRecord (
     `id` int AUTO_INCREMENT  PRIMARY KEY,
-    `local_file_name` TEXT NOT NULL COMMENT 'The name of the file on disk',
+    `local_file_name` VARCHAR(254) NOT NULL COMMENT 'The name of the file on disk',
     `local_file_path` TEXT NOT NULL COMMENT 'Absolute path to the file on the disk',
     `local_file_size` INT COMMENT 'On Disk File size',
     `remote_file_name` TExT COMMENT 'Name of the Remote file',

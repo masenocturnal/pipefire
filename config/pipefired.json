@@ -19,19 +19,32 @@
                     "remoteDir": "./Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "",
+                        "host": "localhost",
                         "key": "",
                         "username": "andmas",
-                        "password": "",
+                        "password": "Koolu350D!",
                         "keyPassword": "",
                         "port": 3389
                     },
+                    "enabled": true
+                },
+                "cleanBFP": {
+                    "remoteDir": "./Pickup",
+                    "localDir": "",
+                    "sftp": {
+                        "host": "10.130.135.30",
+                        "key": "/home/sysam/.ssh/bfp_rsa.pem",
+                        "username": "serveradmin",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
                     "enabled": false
                 },
-                "encryptFiles": { 
+                "encryptFiles": {
                     "srcDir": "/tmp/ddrun/Pickup/",
                     "outputDir": "/tmp/ddrun/Encrypted",
-                    "providers" : {
+                    "providers": {
                         "anz": {
                             "encryptionKey": "/home/andmas/keys/public/anz.pub",
                             "fingerprint": "",
@@ -63,7 +76,6 @@
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
                     "remoteDir": "./Out/Certegy/DE/",
-
                     "sftp": {
                         "host": "10.130.24.139",
                         "key": "",
@@ -100,7 +112,7 @@
                     },
                     "enabled": true
                 }
-            }        
+            }
         }
     }
 }
