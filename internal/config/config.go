@@ -1,26 +1,24 @@
 package config
 
 import (
-	"github.com/masenocturnal/pipefire/internal/sftp"
+	"github.com/masenocturnal/pipefire/pipelines/directdebit"
 	"github.com/spf13/viper"
 )
 
-// DbConnection stores connection information for the database
-type DbConnection struct {
-	// @todo pull from config
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Host     string `json:"host"`
-	Name     string `json:"name"`
-	Timeout  string `json:"timeout"`
+// @todo load dynamically
+
+//Pipelines top level =pipeline configuration
+type Pipelines struct {
+	DirectDebit directdebit.Config `json:"directdebit"`
 }
 
 // HostConfig data structure that represent a valid configuration file
 type HostConfig struct {
-	LogLevel   string                   `json:"loglevel"`
-	Background bool                     `json:"background"`
-	Database   DbConnection             `json:"database"`
-	Sftp       map[string]sftp.Endpoint `json:"sftp"`
+	LogLevel   string    `json:"loglevel"`
+	Background bool      `json:"background"`
+	Pipelines  Pipelines `json:"piplines"`
+	// Sftp       map[string]sftp.Endpoint         `json:"sftp"`
+	// Crypto     map[string]crypto.ProviderConfig `json:"crypto"`
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
@@ -31,6 +29,7 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 	conf.SetConfigName(configName)
 	conf.AddConfigPath("/etc/pipefire/")
 	conf.AddConfigPath("../config/")
+	conf.AddConfigPath("./")
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()

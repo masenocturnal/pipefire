@@ -1,39 +1,118 @@
 {
     "loglevel": "debug",
     "background": "true",
-    "database": {
-        "user": "asdf",
-        "host":"asdf",
-        "password": "asdf",
-        "database": "asd",
-        "timeout": ""
-    },
-    "sftp": {
-        "web01": {
-            "host": "",
-            "key": "foo.pub",
-            "username": "user2",
-            "password": "",
-            "key_password": "",
-            "port": 22
-        },
-        "connection2": {
-            "host": "",
-            "key": "foo.pub",
-            "username": "user1",
-            "password": "",
-            "key_password": "",
-            "port": 22
-        }
-    },
-    "crypto": {
-        "bank1Send": {
-            "publicKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-pub.asc",
-            "fingerPrint": "2938C566341C930C51F36B0620F99C421B73A0B3"            
-        },
-        "bank1Receive": {
-            "privateKey": "/home/andmas/go/src/github.com/masenocturnal/pipefire/internal/crypto/sample-priv.asc",
-            "fingerprint": "2938C566341C930C51F36B0620F99C421B73A0B3"
+    "pipelines": {
+        "directdebit": {
+            "database": {
+                "user": "pipefire",
+                "net": "tcp",
+                "addr": "localhost:3306",
+                "passwd": "",
+                "dbname": "pipefire",
+                "allowNativePasswords": true
+            },
+            "transferLog": {
+                "table": "FileTransfers"
+            },
+            "tasks": {
+                "getFilesFromBFP": {
+                    "remoteDir": "./Pickup",
+                    "localDir": "/tmp/ddrun/Pickup",
+                    "sftp": {
+                        "host": "localhost",
+                        "key": "",
+                        "username": "andmas",
+                        "password": "Koolu350D!",
+                        "keyPassword": "",
+                        "port": 3389
+                    },
+                    "enabled": true
+                },
+                "cleanBFP": {
+                    "remoteDir": "./Pickup",
+                    "localDir": "",
+                    "sftp": {
+                        "host": "10.130.135.30",
+                        "key": "/home/sysam/.ssh/bfp_rsa.pem",
+                        "username": "serveradmin",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": false
+                },
+                "encryptFiles": {
+                    "srcDir": "/tmp/ddrun/Pickup/",
+                    "outputDir": "/tmp/ddrun/Encrypted",
+                    "providers": {
+                        "anz": {
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        },
+                        "px": {
+                            "encryptionKey": "/home/andmas/keys/public/px.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        },
+                        "bnz": {
+                            "encryptionKey": "/home/andmas/keys/px/PX_UAT_GPG_PUB.asc",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "signingFingerPrint": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": ""
+                        }
+                    },
+                    "enabled": false
+                },
+                "sftpFilesToANZ": {
+                    "localDir": "/tmp/ddrun/Encrypted/ANZ",
+                    "remoteDir": "./Out/Certegy/DE/",
+                    "sftp": {
+                        "host": "10.130.24.139",
+                        "key": "",
+                        "username": "andmas",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 3389
+                    },
+                    "enabled": false
+                },
+                "sftpFilesToPx": {
+                    "localDir": "/tmp/ddrun/Encrypted/PX",
+                    "remoteDir": "./In",
+                    "sftp": {
+                        "host": "",
+                        "key": "",
+                        "username": "ubuntu",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": false
+                },
+                "sftpFilesToBNZ": {
+                    "localDir": "/tmp/ddrun/Pickup/BNZ",
+                    "remoteDir": "./from",
+                    "sftp": {
+                        "host": "localhost",
+                        "key": "",
+                        "username": "am",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": true
+                }
+            }
         }
     }
 }
