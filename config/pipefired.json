@@ -111,6 +111,13 @@
                         "port": 22
                     },
                     "enabled": true
+                },
+                "cleanDirtyFiles": {
+                    "dir": "./Pickup"
+                },
+                "archiveTransferred": {
+                    "src": "Encrypted",
+                    "dest": "/tmp/send_files/"
                 }
             }
         }

@@ -16,22 +16,26 @@ type Pipeline interface {
 	sftpGet(conf SftpConfig) error
 	encryptFiles(con *Config) (err []error)
 	sftpTo(conf SftpConfig) error
+	archive(conf ArchiveConfig) error
+	p(conf ArchiveConfig) error
 }
 
-//Tasks Configuration
-type Tasks struct {
-	GetFilesFromBFP SftpConfig         `json:"getFilesFromBFP"`
-	CleanBFP        SftpConfig         `json:"cleanBFP"`
-	EncryptFiles    EncryptFilesConfig `json:"encrypteFiles"`
-	SftpFilesToANZ  SftpConfig         `json:"sftpFilesToANZ"`
-	SftpFilesToPx   SftpConfig         `json:"sftpFilesToPx"`
-	SftpFilesToBNZ  SftpConfig         `json:"sftpFilesToBNZ"`
+//TasksConfig Configuration
+type TasksConfig struct {
+	GetFilesFromBFP    SftpConfig         `json:"getFilesFromBFP"`
+	CleanBFP           SftpConfig         `json:"cleanBFP"`
+	EncryptFiles       EncryptFilesConfig `json:"encrypteFiles"`
+	SftpFilesToANZ     SftpConfig         `json:"sftpFilesToANZ"`
+	SftpFilesToPx      SftpConfig         `json:"sftpFilesToPx"`
+	SftpFilesToBNZ     SftpConfig         `json:"sftpFilesToBNZ"`
+	ArchiveTransferred ArchiveConfig      `json:"archiveTransferred"`
+	CleanDirtyFiles    CleanUpConfig      `json:"cleanDirtyFiles`
 }
 
 // Config defines the required arguements for the pipeline
 type Config struct {
 	Database mysql.Config `json:"database"`
-	Tasks    Tasks        `json:"tasks"`
+	Tasks    TasksConfig  `json:"tasks"`
 }
 
 type ddPipeline struct {
@@ -90,6 +94,7 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 	p.correlationID = correlationID
 
+	// @todo put this into a workflow
 	p.log.Info("Starting Direct Debit Pipeline")
 
 	// @todo config validation
@@ -122,6 +127,14 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 		errorList = append(errorList, err)
 	}
 
+	if err := p.archive(p.taskConfig); err != nil {
+		errorList := append(errorList, err)
+	}
+
+	if err := p.cleanUp(p.taskConfig); err != nil {
+		errorList := append(errorList, err)
+	}
+
 	if len(errorList) > 0 {
 		p.log.Error("END DD Pipeline with Errors")
 	} else {
@@ -136,6 +149,17 @@ func (p ddPipeline) Close() error {
 		p.log.Warningf("Error closing database connecton, %s", err.Error())
 	}
 	return nil
+}
+
+func (p ddPipeline) archive(config *Config) error {
+	p.log.Info("Archiving Transferred Files")
+
+	archiveConfig := config.Tasks.
+		p.log.Info("Archiving Transferred Files")
+}
+
+func (p ddPipeline) cleanUp(config *Config) error {
+
 }
 
 func (p ddPipeline) getFilesFromBFP(config *Config) error {
