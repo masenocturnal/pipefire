@@ -14,6 +14,8 @@ type ArchiveConfig struct {
 	Dest string `json:"dest"`
 }
 
+// ArchiveTransferred Creates a tar archive of the encrypted files.
+// As the files are encrypted there is no point compressing them
 func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 
 	src, err := os.Stat(conf.Src)
@@ -24,9 +26,12 @@ func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 	var fileList []string
 	if src.IsDir() {
 		// read the dir
-		fileList, err := ioutil.ReadDir(conf.Src)
+		files, err := ioutil.ReadDir(conf.Src)
 		if err != nil {
 			return err
+		}
+		for _, f := range files {
+			fileList = append(fileList, f.Name())
 		}
 	} else {
 		fileList = []string{
@@ -38,10 +43,16 @@ func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 }
 
 func (d ddPipeline) createTar(filePaths []string, dest string) (errors []error) {
-	// Create and add some files to the archive.
-	os.Create()
 
-	tw := tar.NewWriter(&buf)
+	// Create and add some files to the archive.
+	f, err := os.Create(dest)
+	if err != nil {
+		return append(errors, fmt.Errorf("Unable to create file %s, %s", dest, err.Error()))
+	}
+
+	defer f.Close()
+
+	tw := tar.NewWriter(f)
 
 	for _, file := range filePaths {
 

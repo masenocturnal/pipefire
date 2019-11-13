@@ -13,11 +13,11 @@ import (
 type Pipeline interface {
 	Execute(correlationID string) (errorList []error)
 	Close() error
-	sftpGet(conf SftpConfig) error
+	sftpGet(conf *SftpConfig) error
 	encryptFiles(con *Config) (err []error)
-	sftpTo(conf SftpConfig) error
-	archive(conf ArchiveConfig) error
-	p(conf ArchiveConfig) error
+	sftpTo(conf *SftpConfig) error
+	archiveTransferred(conf *ArchiveConfig) error
+	cleanDirtyFiles(conf *CleanUpConfig) []error
 }
 
 //TasksConfig Configuration
@@ -115,6 +115,11 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 		return err
 	}
 
+	//
+	if err := p.cleanUp(p.taskConfig); err != nil {
+		errorList = append(errorList, err...)
+	}
+
 	if err := p.sftpFilesToANZ(p.taskConfig); err != nil {
 		errorList = append(errorList, err)
 	}
@@ -128,11 +133,7 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 	}
 
 	if err := p.archive(p.taskConfig); err != nil {
-		errorList := append(errorList, err)
-	}
-
-	if err := p.cleanUp(p.taskConfig); err != nil {
-		errorList := append(errorList, err)
+		errorList = append(errorList, err)
 	}
 
 	if len(errorList) > 0 {
@@ -154,12 +155,21 @@ func (p ddPipeline) Close() error {
 func (p ddPipeline) archive(config *Config) error {
 	p.log.Info("Archiving Transferred Files")
 
-	archiveConfig := config.Tasks.
-		p.log.Info("Archiving Transferred Files")
+	archiveConfig := config.Tasks.ArchiveTransferred
+	if err := p.archiveTransferred(&archiveConfig); err != nil {
+		p.log.Error(err.Error())
+		return err
+	}
+	p.log.Info("Archiving Transferred Files Complete")
+	return nil
 }
 
-func (p ddPipeline) cleanUp(config *Config) error {
-
+func (p ddPipeline) cleanUp(config *Config) []error {
+	p.log.Info("Clean Up Start")
+	cleanUpConfig := config.Tasks.CleanDirtyFiles
+	err := p.cleanDirtyFiles(&cleanUpConfig)
+	p.log.Info("Clean Up Complete")
+	return err
 }
 
 func (p ddPipeline) getFilesFromBFP(config *Config) error {
@@ -167,7 +177,7 @@ func (p ddPipeline) getFilesFromBFP(config *Config) error {
 	p.log.Info("GetFilesFromBFP Start")
 	bfpSftp := config.Tasks.GetFilesFromBFP
 	if bfpSftp.Enabled {
-		if err := p.sftpGet(bfpSftp); err != nil {
+		if err := p.sftpGet(&bfpSftp); err != nil {
 			p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
 			return err
 		}
@@ -184,7 +194,7 @@ func (p ddPipeline) cleanBFP(config *Config) error {
 	p.log.Info("CleanBFP Start")
 	bfpClean := config.Tasks.CleanBFP
 	if bfpClean.Enabled {
-		if err := p.sftpClean(bfpClean); err != nil {
+		if err := p.sftpClean(&bfpClean); err != nil {
 			p.log.Warningf("Unable to clean remote dir %s", err.Error())
 			return err
 		}
@@ -215,7 +225,7 @@ func (p ddPipeline) sftpFilesToANZ(config *Config) error {
 
 	anzSftp := config.Tasks.SftpFilesToANZ
 	if anzSftp.Enabled {
-		if err := p.sftpTo(anzSftp); err != nil {
+		if err := p.sftpTo(&anzSftp); err != nil {
 			return err
 		}
 		p.log.Info("SftpFilesToANZ Complete")
@@ -230,7 +240,7 @@ func (p ddPipeline) sftpFilesToPx(config *Config) error {
 	p.log.Info("SftpFilesToPx Start")
 	pxSftp := config.Tasks.SftpFilesToPx
 	if pxSftp.Enabled {
-		if err := p.sftpTo(pxSftp); err != nil {
+		if err := p.sftpTo(&pxSftp); err != nil {
 			return err
 		}
 		p.log.Info("SftpFilesToPx Complete")
@@ -246,7 +256,7 @@ func (p ddPipeline) sftpFilesToBNZ(config *Config) error {
 
 	bnzSftp := config.Tasks.SftpFilesToBNZ
 	if bnzSftp.Enabled {
-		if err := p.sftpTo(bnzSftp); err != nil {
+		if err := p.sftpTo(&bnzSftp); err != nil {
 			return err
 		}
 		p.log.Info("SftpFilesToBNZ Complete")

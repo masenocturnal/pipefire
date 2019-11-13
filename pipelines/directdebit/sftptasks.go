@@ -26,7 +26,7 @@ type SftpConfig struct {
 }
 
 // get files from a particular endpoint
-func (p ddPipeline) sftpGet(conf SftpConfig) error {
+func (p ddPipeline) sftpGet(conf *SftpConfig) error {
 	p.log.Infof("Begin sftpGet: %s ", conf.Sftp.Host)
 	sftp, err := sftp.NewConnection("From", conf.Sftp, p.log)
 	if err != nil {
@@ -54,7 +54,7 @@ func (p ddPipeline) sftpGet(conf SftpConfig) error {
 }
 
 // sftpClean cleans the repote directory
-func (p ddPipeline) sftpClean(conf SftpConfig) (err error) {
+func (p ddPipeline) sftpClean(conf *SftpConfig) (err error) {
 	p.log.Infof("Begin sftpClean: %s", conf.Sftp.Host)
 	p.log.Debugf("Cleaning remote dir: %s ", conf.RemoteDir)
 
@@ -71,7 +71,7 @@ func (p ddPipeline) sftpClean(conf SftpConfig) (err error) {
 	return err
 }
 
-func (p ddPipeline) sftpToSafe(conf SftpConfig) (err error) {
+func (p ddPipeline) sftpToSafe(conf *SftpConfig) (err error) {
 
 	p.log.Infof("Begin sftpToSafe: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
@@ -109,7 +109,7 @@ func (p ddPipeline) sftpToSafe(conf SftpConfig) (err error) {
 }
 
 // send files to a particular endpoint
-func (p ddPipeline) sftpTo(conf SftpConfig) (err error) {
+func (p ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 	p.log.Infof("Begin sftpTo: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
 
