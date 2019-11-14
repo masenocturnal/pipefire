@@ -10,6 +10,14 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceRoot}/cmd/pipefired.go",
+            "useApiV1": false,
+            "dlvLoadConfig": {
+                "followPointers": true,
+                "maxVariableRecurse": 1,
+                "maxStringLen": 64,
+                "maxArrayValues": 64,
+                "maxStructFields": -1
+            },
             "env": {},
             "args": []
         }
