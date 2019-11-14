@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -67,6 +68,15 @@ func NewConnection(name string, conf Endpoint, log *log.Entry) (Transport, error
 	var authMethod []ssh.AuthMethod = make([]ssh.AuthMethod, 0)
 
 	if len(conf.Key) > 0 {
+
+		if strings.Index(conf.Key, "~") == 0 {
+			usr, err := user.Current()
+			if err != nil {
+				return nil, err
+			}
+
+			conf.Key = strings.Replace(conf.Key, "~", usr.HomeDir, 1)
+		}
 		keyAuth, err := getPrivateKeyAuthentication(conf.Key, conf.KeyPassword)
 		if err != nil {
 			return transport, err
