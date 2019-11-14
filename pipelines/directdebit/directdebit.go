@@ -115,11 +115,6 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 		return err
 	}
 
-	// remove all the plain text files
-	if err := p.cleanUp(); err != nil {
-		errorList = append(errorList, err...)
-	}
-
 	// Transfer the files
 	if err := p.sftpFilesToANZ(); err != nil {
 		errorList = append(errorList, err)
@@ -136,6 +131,11 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 	// Archive the folder
 	if err := p.archive(); err != nil {
 		errorList = append(errorList, err)
+	}
+
+	// remove all the plain text files
+	if err := p.cleanUp(); err != nil {
+		errorList = append(errorList, err...)
 	}
 
 	if len(errorList) > 0 {
@@ -163,6 +163,7 @@ func (p ddPipeline) archive() error {
 			p.log.Error(err.Error())
 			return err
 		}
+
 		p.log.Info("Archiving Transferred Files Complete")
 	} else {
 		p.log.Warn("Archiving Transferred Files Skipped")
