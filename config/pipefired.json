@@ -21,8 +21,8 @@
                     "sftp": {
                         "host": "localhost",
                         "key": "",
-                        "username": "andmas",
-                        "password": "Koolu350D!",
+                        "username": "ubuntu",
+                        "password": "",
                         "keyPassword": "",
                         "port": 3389
                     },
@@ -34,7 +34,7 @@
                     "sftp": {
                         "host": "10.130.135.30",
                         "key": "/home/sysam/.ssh/bfp_rsa.pem",
-                        "username": "serveradmin",
+                        "username": "ubuntu",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
@@ -83,9 +83,9 @@
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
                     "remoteDir": "./Out/Certegy/DE/",
                     "sftp": {
-                        "host": "10.130.24.139",
+                        "host": "localhost",
                         "key": "",
-                        "username": "andmas",
+                        "username": "ubuntu",
                         "password": "",
                         "keyPassword": "",
                         "port": 3389
