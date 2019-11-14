@@ -21,26 +21,7 @@ type ArchiveConfig struct {
 // As the files are encrypted there is no point compressing them
 func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 
-	src, err := os.Stat(conf.Src)
-	if err != nil {
-		return fmt.Errorf("Unable to read: %s. %s", conf.Src, err.Error())
-	}
-
-	var fileList []string
-	if src.IsDir() {
-		// read the dir
-		files, err := ioutil.ReadDir(conf.Src)
-		if err != nil {
-			return err
-		}
-		for _, f := range files {
-			fileList = append(fileList, filepath.Join(conf.Src, f.Name()))
-		}
-	} else {
-		fileList = []string{
-			conf.Src,
-		}
-	}
+	fileList, err := getFileList(conf.Src)
 
 	errors := d.createTar(fileList, conf.Dest)
 	if errors != nil && len(errors) > 0 {
@@ -50,6 +31,44 @@ func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 		return fmt.Errorf("Unable to create archive")
 	}
 	return
+}
+
+// recursively iterates through the files obtaining the full file path to create a canonical list of files to add to the archive
+func getFileList(src string) ([]string, error) {
+
+	fInfo, err := os.Stat(src)
+
+	if err != nil {
+		return nil, fmt.Errorf("Unable to read: %s. %s", src, err.Error())
+	}
+
+	var fileList []string
+	if fInfo.IsDir() {
+		// read the dir
+		files, err := ioutil.ReadDir(src)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if f.IsDir() {
+				dirPath := filepath.Join(src, f.Name())
+				filesInDir, err := getFileList(dirPath)
+				if err != nil {
+					return nil, err
+				}
+				fileList = append(fileList, filesInDir...)
+
+			} else {
+				// regular files we will just add to the list
+				fileList = append(fileList, filepath.Join(src, f.Name()))
+			}
+		}
+	} else {
+		fileList = []string{
+			src,
+		}
+	}
+	return fileList, err
 }
 
 func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []error) {
