@@ -45,7 +45,7 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 		Enabled:   true,
 	}
 
-	tasksConfig := &Tasks{
+	tasksConfig := &TasksConfig{
 		EncryptFiles: *encryptConfig,
 	}
 	logEntry := log.WithField("test", "test")
@@ -57,8 +57,7 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	errs := pipeline.encryptFiles(ddConfig)
+	errs := pipeline.pgpEncryptFilesForBank(encryptConfig)
 	if len(errs) > 0 {
 		t.Error(err)
 	}

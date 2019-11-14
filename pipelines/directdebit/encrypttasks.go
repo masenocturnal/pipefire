@@ -84,7 +84,7 @@ func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir
 	return
 }
 
-func (p ddPipeline) pgpEncryptFilesForBank(config EncryptFilesConfig) (errList []error) {
+func (p ddPipeline) pgpEncryptFilesForBank(config *EncryptFilesConfig) (errList []error) {
 	p.log.Infof("Attempting to Encrypt files in %s", config.SrcDir)
 
 	// @todo this could be cleaner there is a bit of code duplication here

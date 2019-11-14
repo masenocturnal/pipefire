@@ -14,10 +14,10 @@ type Pipeline interface {
 	Execute(correlationID string) (errorList []error)
 	Close() error
 	sftpGet(conf *SftpConfig) error
-	encryptFiles(con *Config) (err []error)
 	sftpTo(conf *SftpConfig) error
 	archiveTransferred(conf *ArchiveConfig) error
 	cleanDirtyFiles(conf *CleanUpConfig) []error
+	pgpEncryptFilesForBank(conf *EncryptFilesConfig) []error
 }
 
 //TasksConfig Configuration
@@ -99,40 +99,42 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 
 	// @todo config validation
 	// @todo turn into loop
-	if err := p.getFilesFromBFP(p.taskConfig); err != nil {
+	if err := p.getFilesFromBFP(); err != nil {
 		// we need the files from the BFP otherwise there is no point
 		return append(errorList, err)
 	}
 
-	if err := p.cleanBFP(p.taskConfig); err != nil {
+	if err := p.cleanBFP(); err != nil {
 		// not a big deal if cleaning fails..we can clean it up after
 		errorList = append(errorList, err)
 	}
 
-	if err := p.encryptFiles(p.taskConfig); err != nil {
+	if err := p.encryptFiles(); err != nil {
 		// We need all the files encrypted
 		// before we continue further
 		return err
 	}
 
-	//
-	if err := p.cleanUp(p.taskConfig); err != nil {
+	// remove all the plain text files
+	if err := p.cleanUp(); err != nil {
 		errorList = append(errorList, err...)
 	}
 
-	if err := p.sftpFilesToANZ(p.taskConfig); err != nil {
+	// Transfer the files
+	if err := p.sftpFilesToANZ(); err != nil {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.sftpFilesToPx(p.taskConfig); err != nil {
+	if err := p.sftpFilesToPx(); err != nil {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.sftpFilesToBNZ(p.taskConfig); err != nil {
+	if err := p.sftpFilesToBNZ(); err != nil {
 		errorList = append(errorList, err)
 	}
 
-	if err := p.archive(p.taskConfig); err != nil {
+	// Archive the folder
+	if err := p.archive(); err != nil {
 		errorList = append(errorList, err)
 	}
 
@@ -152,10 +154,10 @@ func (p ddPipeline) Close() error {
 	return nil
 }
 
-func (p ddPipeline) archive(config *Config) error {
+func (p ddPipeline) archive() error {
 	p.log.Info("Archiving Transferred Files")
 
-	archiveConfig := config.Tasks.ArchiveTransferred
+	archiveConfig := p.taskConfig.Tasks.ArchiveTransferred
 	if err := p.archiveTransferred(&archiveConfig); err != nil {
 		p.log.Error(err.Error())
 		return err
@@ -164,18 +166,18 @@ func (p ddPipeline) archive(config *Config) error {
 	return nil
 }
 
-func (p ddPipeline) cleanUp(config *Config) []error {
+func (p ddPipeline) cleanUp() []error {
 	p.log.Info("Clean Up Start")
-	cleanUpConfig := config.Tasks.CleanDirtyFiles
+	cleanUpConfig := p.taskConfig.Tasks.CleanDirtyFiles
 	err := p.cleanDirtyFiles(&cleanUpConfig)
 	p.log.Info("Clean Up Complete")
 	return err
 }
 
-func (p ddPipeline) getFilesFromBFP(config *Config) error {
+func (p ddPipeline) getFilesFromBFP() error {
 
 	p.log.Info("GetFilesFromBFP Start")
-	bfpSftp := config.Tasks.GetFilesFromBFP
+	bfpSftp := p.taskConfig.Tasks.GetFilesFromBFP
 	if bfpSftp.Enabled {
 		if err := p.sftpGet(&bfpSftp); err != nil {
 			p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
@@ -189,10 +191,10 @@ func (p ddPipeline) getFilesFromBFP(config *Config) error {
 	return nil
 }
 
-func (p ddPipeline) cleanBFP(config *Config) error {
+func (p ddPipeline) cleanBFP() error {
 
 	p.log.Info("CleanBFP Start")
-	bfpClean := config.Tasks.CleanBFP
+	bfpClean := p.taskConfig.Tasks.CleanBFP
 	if bfpClean.Enabled {
 		if err := p.sftpClean(&bfpClean); err != nil {
 			p.log.Warningf("Unable to clean remote dir %s", err.Error())
@@ -204,11 +206,11 @@ func (p ddPipeline) cleanBFP(config *Config) error {
 	return nil
 }
 
-func (p ddPipeline) encryptFiles(config *Config) []error {
+func (p ddPipeline) encryptFiles() []error {
 	p.log.Info("EncryptFiles Start")
-	encryptionConfig := config.Tasks.EncryptFiles
+	encryptionConfig := p.taskConfig.Tasks.EncryptFiles
 	if encryptionConfig.Enabled {
-		if err := p.pgpEncryptFilesForBank(encryptionConfig); err != nil {
+		if err := p.pgpEncryptFilesForBank(&encryptionConfig); err != nil {
 			p.log.Error("Unable to encrypt all files..Aborting")
 			return err
 		}
@@ -219,11 +221,11 @@ func (p ddPipeline) encryptFiles(config *Config) []error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToANZ(config *Config) error {
+func (p ddPipeline) sftpFilesToANZ() error {
 
 	p.log.Info("SftpFilesToANZ Start")
 
-	anzSftp := config.Tasks.SftpFilesToANZ
+	anzSftp := p.taskConfig.Tasks.SftpFilesToANZ
 	if anzSftp.Enabled {
 		if err := p.sftpTo(&anzSftp); err != nil {
 			return err
@@ -236,9 +238,9 @@ func (p ddPipeline) sftpFilesToANZ(config *Config) error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToPx(config *Config) error {
+func (p ddPipeline) sftpFilesToPx() error {
 	p.log.Info("SftpFilesToPx Start")
-	pxSftp := config.Tasks.SftpFilesToPx
+	pxSftp := p.taskConfig.Tasks.SftpFilesToPx
 	if pxSftp.Enabled {
 		if err := p.sftpTo(&pxSftp); err != nil {
 			return err
@@ -251,10 +253,10 @@ func (p ddPipeline) sftpFilesToPx(config *Config) error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToBNZ(config *Config) error {
+func (p ddPipeline) sftpFilesToBNZ() error {
 	p.log.Info("SftpFilesToBNZ Start")
 
-	bnzSftp := config.Tasks.SftpFilesToBNZ
+	bnzSftp := p.taskConfig.Tasks.SftpFilesToBNZ
 	if bnzSftp.Enabled {
 		if err := p.sftpTo(&bnzSftp); err != nil {
 			return err
