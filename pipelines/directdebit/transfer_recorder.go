@@ -106,14 +106,24 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 }
 
 //RecordError Updates the transfer record in the database to record the error message
-func (t TransferLog) RecordError(txn *gorm.DB, hash string, remoteHost string, errorMsg string) error {
+func (t TransferLog) RecordError(txn *gorm.DB, rec *Record) error {
 
-	sql := "WHERE local_file_hash = ? and remote_host = ? and deleted_at IS NULL"
+	sql := "local_file_hash = ? and remote_host = ? and deleted_at IS NULL"
 
-	if err := txn.Where(sql, hash, remoteHost).Update("TransferErrors", errorMsg).Error; err != nil {
+	result := txn.
+		Model(rec).
+		Where(sql, rec.LocalFileHash, rec.RemoteHost, rec.CorrelationID).
+		UpdateColumns(Record{
+			TransferEnd:    rec.TransferEnd,
+			TransferErrors: rec.TransferErrors,
+		})
+	if err := result.Error; err != nil {
+
 		t.log.Error(err.Error())
 		return err
 	}
+	t.log.Debugf("Rows Updated %d ", result.RowsAffected)
+
 	return nil
 }
 

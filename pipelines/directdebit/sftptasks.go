@@ -159,7 +159,16 @@ func (p ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 			// attempt to transfer
 			confirmation, err := sftp.SendFile(cur, conf.RemoteDir)
 			if err != nil {
-				p.transferlog.RecordError(tx, fileHash, conf.Sftp.Host, err.Error())
+				rec := &Record{
+					RemoteHost: conf.Sftp.Host,
+					// @todo see if this is populated TransferredFileHash: confirmation.TransferredHash,
+					TransferStart:  startTime,
+					TransferEnd:    time.Now(),
+					LocalFileHash:  fileHash,
+					CorrelationID:  p.correlationID,
+					TransferErrors: err.Error(),
+				}
+				p.transferlog.RecordError(tx, rec)
 			}
 
 			// log the confirmation
