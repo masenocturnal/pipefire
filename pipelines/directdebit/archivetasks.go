@@ -6,6 +6,8 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
+	"time"
 )
 
 //ArchiveConfig configuration for the archive task
@@ -31,7 +33,7 @@ func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 			return err
 		}
 		for _, f := range files {
-			fileList = append(fileList, f.Name())
+			fileList = append(fileList, filepath.Join(conf.Src, f.Name()))
 		}
 	} else {
 		fileList = []string{
@@ -39,15 +41,28 @@ func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
 		}
 	}
 
-	return err
+	errors := d.createTar(fileList, conf.Dest)
+	if errors != nil && len(errors) > 0 {
+		for _, e := range errors {
+			d.log.Errorf("Error: %s ", e.Error())
+		}
+		return fmt.Errorf("Unable to create archive")
+	}
+	return
 }
 
-func (d ddPipeline) createTar(filePaths []string, dest string) (errors []error) {
+func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []error) {
+
+	if err := os.MkdirAll(destDir, 0760); err != nil {
+		return append(errors, fmt.Errorf("Can't create destination directory %s : %s ", destDir, err.Error()))
+	}
 
 	// Create and add some files to the archive.
-	f, err := os.Create(dest)
+	archiveName := filepath.Join(destDir, time.Now().Format("2006-01-02")+".tar")
+
+	f, err := os.Create(archiveName)
 	if err != nil {
-		return append(errors, fmt.Errorf("Unable to create file %s, %s", dest, err.Error()))
+		return append(errors, fmt.Errorf("Unable to create file %s, %s", archiveName, err.Error()))
 	}
 
 	defer f.Close()
@@ -58,7 +73,7 @@ func (d ddPipeline) createTar(filePaths []string, dest string) (errors []error) 
 
 		s, err := os.Stat(file)
 		if err != nil {
-			d.log.Error("File %s can't be read %s", file, err.Error())
+			d.log.Errorf("File %s can't be read %s", file, err.Error())
 			return append(errors, err)
 		}
 
@@ -72,16 +87,16 @@ func (d ddPipeline) createTar(filePaths []string, dest string) (errors []error) 
 		}
 		contents, err := ioutil.ReadFile(file)
 		if err != nil {
-			d.log.Error("Error reading file: %s", file, err.Error())
+			d.log.Errorf("Error reading file: %s : %s", file, err.Error())
 			return append(errors, err)
 		}
 		if _, err := tw.Write(contents); err != nil {
-			d.log.Error("Unable to close tar writer %s ", err.Error())
+			d.log.Errorf("Unable to close tar writer %s ", err.Error())
 			return append(errors, err)
 		}
 	}
 	if err := tw.Close(); err != nil {
-		d.log.Error("Unable to close tar writer %s ", err.Error())
+		d.log.Errorf("Unable to close tar writer %s ", err.Error())
 		return append(errors, err)
 	}
 	return
