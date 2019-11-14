@@ -73,6 +73,11 @@
                     },
                     "enabled": false
                 },
+                "cleanDirtyFiles": {
+                    "paths": [
+                        "./Pickup"
+                    ]
+                },
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
                     "remoteDir": "./Out/Certegy/DE/",
@@ -111,6 +116,10 @@
                         "port": 22
                     },
                     "enabled": true
+                },                
+                "archiveTransferred": {
+                    "src": "Encrypted",
+                    "dest": "/tmp/send_files/"
                 }
             }
         }
