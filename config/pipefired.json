@@ -76,7 +76,8 @@
                 "cleanDirtyFiles": {
                     "paths": [
                         "./Pickup"
-                    ]
+                    ],
+                    "enabled": true
                 },
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
@@ -119,7 +120,8 @@
                 },                
                 "archiveTransferred": {
                     "src": "Encrypted",
-                    "dest": "/tmp/send_files/"
+                    "dest": "/tmp/send_files/",
+                    "enabled": true
                 }
             }
         }
