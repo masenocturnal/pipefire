@@ -29,7 +29,7 @@ type TasksConfig struct {
 	SftpFilesToPx      SftpConfig         `json:"sftpFilesToPx"`
 	SftpFilesToBNZ     SftpConfig         `json:"sftpFilesToBNZ"`
 	ArchiveTransferred ArchiveConfig      `json:"archiveTransferred"`
-	CleanDirtyFiles    CleanUpConfig      `json:"cleanDirtyFiles`
+	CleanDirtyFiles    CleanUpConfig      `json:"cleanDirtyFiles"`
 }
 
 // Config defines the required arguements for the pipeline
@@ -115,11 +115,6 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 		return err
 	}
 
-	// remove all the plain text files
-	if err := p.cleanUp(); err != nil {
-		errorList = append(errorList, err...)
-	}
-
 	// Transfer the files
 	if err := p.sftpFilesToANZ(); err != nil {
 		errorList = append(errorList, err)
@@ -136,6 +131,11 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 	// Archive the folder
 	if err := p.archive(); err != nil {
 		errorList = append(errorList, err)
+	}
+
+	// remove all the plain text files
+	if err := p.cleanUp(); err != nil {
+		errorList = append(errorList, err...)
 	}
 
 	if len(errorList) > 0 {
@@ -158,19 +158,30 @@ func (p ddPipeline) archive() error {
 	p.log.Info("Archiving Transferred Files")
 
 	archiveConfig := p.taskConfig.Tasks.ArchiveTransferred
-	if err := p.archiveTransferred(&archiveConfig); err != nil {
-		p.log.Error(err.Error())
-		return err
+	if archiveConfig.Enabled {
+		if err := p.archiveTransferred(&archiveConfig); err != nil {
+			p.log.Error(err.Error())
+			return err
+		}
+
+		p.log.Info("Archiving Transferred Files Complete")
+	} else {
+		p.log.Warn("Archiving Transferred Files Skipped")
 	}
-	p.log.Info("Archiving Transferred Files Complete")
+
 	return nil
 }
 
-func (p ddPipeline) cleanUp() []error {
+func (p ddPipeline) cleanUp() (err []error) {
 	p.log.Info("Clean Up Start")
 	cleanUpConfig := p.taskConfig.Tasks.CleanDirtyFiles
-	err := p.cleanDirtyFiles(&cleanUpConfig)
-	p.log.Info("Clean Up Complete")
+	if cleanUpConfig.Enabled {
+		err = p.cleanDirtyFiles(&cleanUpConfig)
+		p.log.Info("Clean Up Complete")
+	} else {
+		p.log.Warn("Clean Up Files Skipped")
+	}
+
 	return err
 }
 

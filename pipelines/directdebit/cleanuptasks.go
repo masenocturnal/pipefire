@@ -7,7 +7,8 @@ import (
 
 // CleanUpConfig defines the configuration for the cleanup task
 type CleanUpConfig struct {
-	Paths []string `json:"paths"`
+	Paths   []string `json:"paths"`
+	Enabled bool     `json:"enabled"`
 }
 
 //cleanDirtyFiles removes all files from the directory

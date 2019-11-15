@@ -1,7 +1,6 @@
 package directdebit
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -87,72 +86,27 @@ func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir
 func (p ddPipeline) pgpEncryptFilesForBank(config *EncryptFilesConfig) (errList []error) {
 	p.log.Infof("Attempting to Encrypt files in %s", config.SrcDir)
 
-	// @todo this could be cleaner there is a bit of code duplication here
-	// loop through directories
-	// GA goes to ANZ
+	for bank, providerConfig := range config.Providers {
 
-	var bank string = "anz"
-	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
-	if anzProviderConfig, ok := config.Providers[bank]; ok {
-		anzCryptoProvider := crypto.NewProvider(anzProviderConfig, p.log)
-		srcDir := filepath.Join(config.SrcDir, "GA")
-		outputDir := filepath.Join(config.OutputDir, "ANZ")
-		err := p.encryptFilesInDir(anzCryptoProvider, srcDir, outputDir)
+		if providerConfig.Enabled {
+			// Create the crypto provider
+			encryptionProvider := crypto.NewProvider(providerConfig, p.log)
+			srcDir := filepath.Join(config.SrcDir, providerConfig.SrcDir)
 
-		if err != nil {
-			for _, e := range err {
-				errList = append(errList, e)
+			outputDir := filepath.Join(config.OutputDir, providerConfig.DestDir)
+			p.log.Debugf("Encrypting all files in located in %s to %s ", srcDir, outputDir)
+
+			// encrypt files
+			err := p.encryptFilesInDir(encryptionProvider, srcDir, outputDir)
+
+			if err != nil {
+				for _, e := range err {
+					errList = append(errList, e)
+				}
 			}
+		} else {
+			p.log.Warnf("Skipping Encryption for %s ", bank)
 		}
-	} else {
-		msg := fmt.Sprintf("Encryption configuration not found. Task encryptFiles Task requires a provider configured for %s", bank)
-		p.log.Error(msg)
-		errList = append(errList, errors.New(msg))
-	}
-
-	bank = "px"
-	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
-	if pxProviderConfig, ok := config.Providers[bank]; ok {
-		pxCryptoProvider := crypto.NewProvider(pxProviderConfig, p.log)
-		srcDir := filepath.Join(config.SrcDir, "PX")
-		outputDir := filepath.Join(config.OutputDir, "PX")
-
-		err := p.encryptFilesInDir(pxCryptoProvider, srcDir, outputDir)
-		if err != nil {
-			for _, e := range err {
-				errList = append(errList, e)
-			}
-		}
-	} else {
-		msg := fmt.Sprintf("Encryption configuration not found. Task encryptFiles Task requires a provider configured for %s", bank)
-		p.log.Error(msg)
-		errList = append(errList, errors.New(msg))
-	}
-
-	// [sysam@sec-docker-101 BNZ]$ gpg2 --verbose -u "Certegy BNZ (FTG-PROD)" -r "BNZConnect (FTG-PROD)" --openpgp --sign --output "${fileName}.gpg"  --encrypt "$fileName"
-	// gpg: using PGP trust model
-	// gpg: using subkey 92715549 instead of primary key 18FC3718
-	// gpg: This key probably belongs to the named user
-	// gpg: writing to `158042884DD.191025.011946.238011.CON.gpg'
-	// gpg: ELG/AES256 encrypted for: "92715549 BNZConnect (FTG-PROD) <BNZConnect@bnz.co.nz>"
-	// gpg: RSA/SHA1 signature from: "6383B673 Certegy BNZ (FTG-PROD)"
-
-	bank = "bnz"
-	p.log.Debugf("Looking in the list providers for configuration config.Providers[%s]", bank)
-	if bnzProviderConfig, ok := config.Providers[bank]; ok {
-		//bnzCryptoProvider := crypto.NewProvider(bnzProviderConfig, p.log)
-		srcDir := filepath.Join(config.SrcDir, "BNZ")
-		outputDir := filepath.Join(config.OutputDir, "BNZ")
-		err := p.pgpCLIEncryptFilesInDir(bnzProviderConfig, srcDir, outputDir)
-		if err != nil {
-			for _, e := range err {
-				errList = append(errList, e)
-			}
-		}
-	} else {
-		msg := fmt.Sprintf("Encryption configuration not found. Task encryptFiles Task requires a provider configured for %s", bank)
-		p.log.Error(msg)
-		errList = append(errList, errors.New(msg))
 	}
 
 	p.log.Debug("Encryption Task Complete")
