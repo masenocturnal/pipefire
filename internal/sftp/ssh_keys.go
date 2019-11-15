@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 
+	"github.com/ScaleFT/sshkeys"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -21,12 +22,14 @@ func getPrivateKeyAuthentication(keyPath string, keyPassword string) (ssh.AuthMe
 
 	var signer ssh.Signer
 	if len(keyPassword) > 0 {
-		signer, err = ssh.ParsePrivateKeyWithPassphrase(keyInBytes, []byte(keyPassword))
+		// signer, err = ssh.ParsePrivateKeyWithPassphrase(keyInBytes, []byte(keyPassword))
+		signer, err = sshkeys.ParseEncryptedPrivateKey(keyInBytes, []byte(keyPassword))
 	} else {
 		signer, err = ssh.ParsePrivateKey(keyInBytes)
 	}
 	if err != nil {
-		return nil, err
+		e := fmt.Errorf("Unable to decrypt private key. This could be because it is a new openssh-v1 encrypted key which is not currently supported. %s", err.Error())
+		return nil, e
 	}
 	return ssh.PublicKeys(signer), err
 }

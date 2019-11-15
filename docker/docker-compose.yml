@@ -11,3 +11,48 @@ services:
       MYSQL_DATABASE: pipefire
     ports:
       - 3306:3306
+    networks:
+      app_net:
+        ipv4_address: 172.20.1.2
+  bfp:
+    build:      
+      context: ./docker-sshd/
+    image: "masenocturnal/sshd:latest" 
+    environment:
+      SSH_USERS: "test:1002:1002"
+      SFTP_MODE: "true"      
+    volumes:
+      - ./bfp:/data
+      - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
+    networks:
+      app_net:
+        ipv4_address: 172.20.1.3
+  anz:
+    image: "masenocturnal/sshd:latest"      
+    environment:
+      SSH_USERS: "test:1002:1002"
+      SFTP_MODE: "true"      
+    volumes:
+      - ./data:/data
+      - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
+    networks:
+      app_net:
+        ipv4_address: 172.20.1.4
+  px:
+    image: "masenocturnal/sshd:latest"    
+    environment:
+      SSH_USERS: "test:1002:1002"
+      SFTP_MODE: "true"
+    volumes:
+      - ./data:/data
+      - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
+    networks:
+      app_net:
+        ipv4_address: 172.20.1.5
+
+networks:
+  app_net:
+    ipam:
+      config:
+        - subnet: 172.20.1.0/24
+          

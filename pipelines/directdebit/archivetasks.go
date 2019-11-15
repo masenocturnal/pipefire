@@ -39,7 +39,7 @@ func getFileList(src string) ([]string, error) {
 	fInfo, err := os.Stat(src)
 
 	if err != nil {
-		return nil, fmt.Errorf("Unable to read: %s. %s", src, err.Error())
+		return nil, fmt.Errorf("Archive: Unable to read source directory: %s. Error is: %s", src, err.Error())
 	}
 
 	var fileList []string

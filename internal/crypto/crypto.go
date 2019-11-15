@@ -29,6 +29,9 @@ type ProviderConfig struct {
 	FingerPrint           string `json:"fingerprint"`
 	EncryptionKeyPassword string `json:"encryptionKeyPassword"`
 	DecryptionKey         string `json:"decryptionKey"`
+	SrcDir                string `json:"srcDir"`
+	DestDir               string `json:"destDir"`
+	Enabled               bool   `json:"enabled"`
 }
 
 //Provider helper functions to encrypt/decrypt files

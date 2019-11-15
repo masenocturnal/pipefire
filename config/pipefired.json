@@ -7,7 +7,7 @@
                 "user": "pipefire",
                 "net": "tcp",
                 "addr": "localhost:3306",
-                "passwd": "",
+                "passwd": "foobar123",
                 "dbname": "pipefire",
                 "allowNativePasswords": true
             },
@@ -19,12 +19,12 @@
                     "remoteDir": "./Pickup",
                     "localDir": "/tmp/ddrun/Pickup",
                     "sftp": {
-                        "host": "localhost",
-                        "key": "",
-                        "username": "andmas",
-                        "password": "Koolu350D!",
+                        "host": "172.20.1.3",
+                        "key": "~/.ssh/id_rsa",
+                        "username": "test",
+                        "password": "",
                         "keyPassword": "",
-                        "port": 3389
+                        "port": 22
                     },
                     "enabled": true
                 },
@@ -32,9 +32,9 @@
                     "remoteDir": "./Pickup",
                     "localDir": "",
                     "sftp": {
-                        "host": "10.130.135.30",
+                        "host": "172.20.1.3",
                         "key": "/home/sysam/.ssh/bfp_rsa.pem",
-                        "username": "serveradmin",
+                        "username": "test",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
@@ -51,7 +51,10 @@
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
-                            "decryptionKey": ""
+                            "decryptionKey": "",                            
+                            "srcDir": "GA",
+                            "destDir": "GA",
+                            "enabled": true
                         },
                         "px": {
                             "encryptionKey": "/home/andmas/keys/public/px.pub",
@@ -59,33 +62,21 @@
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
-                            "decryptionKey": ""
-                        },
-                        "bnz": {
-                            "encryptionKey": "/home/andmas/keys/px/PX_UAT_GPG_PUB.asc",
-                            "fingerprint": "",
-                            "signingKey": "",
-                            "signingKeyPassword": "",
-                            "signingFingerPrint": "",
-                            "encryptionKeyPassword": "",
-                            "decryptionKey": ""
-                        }
+                            "decryptionKey": "",
+                            "srcDir": "PX",
+                            "destDir": "PX",
+                            "enabled": true
+                        }        
                     },
                     "enabled": false
-                },
-                "cleanDirtyFiles": {
-                    "paths": [
-                        "./Pickup"
-                    ],
-                    "enabled": true
                 },
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
                     "remoteDir": "./Out/Certegy/DE/",
                     "sftp": {
-                        "host": "10.130.24.139",
+                        "host": "localhost",
                         "key": "",
-                        "username": "andmas",
+                        "username": "test",
                         "password": "",
                         "keyPassword": "",
                         "port": 3389
@@ -104,23 +95,17 @@
                         "port": 22
                     },
                     "enabled": false
-                },
-                "sftpFilesToBNZ": {
-                    "localDir": "/tmp/ddrun/Pickup/BNZ",
-                    "remoteDir": "./from",
-                    "sftp": {
-                        "host": "localhost",
-                        "key": "",
-                        "username": "am",
-                        "password": "",
-                        "keyPassword": "",
-                        "port": 22
-                    },
-                    "enabled": true
                 },                
                 "archiveTransferred": {
-                    "src": "Encrypted",
+                    "src": "/tmp/ddrun/Encrypted",
                     "dest": "/tmp/send_files/",
+                    "enabled": true
+                },
+                "cleanDirtyFiles": {
+                    "paths": [
+                        "/tmp/ddrun/Pickup/",
+                        "/tmp/ddrun/Encrypted"
+                    ],
                     "enabled": true
                 }
             }

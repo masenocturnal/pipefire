@@ -230,7 +230,9 @@ func (p ddPipeline) recordFilesToSend(localDir string, remoteHost string) error 
 
 	if len(filesInDir) < 1 {
 		p.log.Warnf("No files to send in %s", localDir)
-		return fmt.Errorf("%s is empty", localDir)
+		// it's not an error ...this can happen in multiple runs but there is
+		// no sense doing anything more
+		return nil
 	}
 
 	hostName, _ := os.Hostname()
