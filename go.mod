@@ -13,4 +13,5 @@ require (
 	github.com/spf13/viper v1.4.0
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 	google.golang.org/genproto v0.0.0-20190404172233-64821d5d2107
+	github.com/streadway/amqp
 )

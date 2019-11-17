@@ -49,7 +49,16 @@ services:
     networks:
       app_net:
         ipv4_address: 172.20.1.5
-
+  rabbitmq:
+    image: rabbitmq:3.8.2-rc.1-management
+    ports:
+      - "5672:5672"
+      - "5671:5671"
+      - "15672:15672"
+      - "15671:15671"
+    networks:
+      app_net:
+        ipv4_address: 172.20.1.6
 networks:
   app_net:
     ipam:

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	uuid "github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
@@ -10,6 +13,7 @@ import (
 	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 )
 
 const version string = "0.9.9"
@@ -27,16 +31,92 @@ func main() {
 	}
 	_ = cntxt
 
-	// d, err := cntxt.Reborn()
-	// if err != nil {
-	// 	log.Fatal("Unable to run: ", err)
-	// }
-	// if d != nil {
-	// 	return
-	// }
-	// defer cntxt.Release()
-
 	log.Infof("PipeFire Daemon Started. Version : %s ", version)
+
+	// create the channel to handle the OS Signal
+	signalChannel := make(chan os.Signal, 1)
+
+	// ask to be notified of
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGHUP)
+
+	go setupMessageListeners()
+	<-signalChannel
+	fmt.Println("Pipefire Shutting Down")
+	os.Exit(0)
+
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %s", msg, err)
+	}
+}
+
+func setupMessageListeners() {
+
+	conn, err := amqp.Dial("amqp://guest:guest@172.20.1.6:5672/")
+	failOnError(err, "Failed to connect to RabbitMQ")
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	failOnError(err, "Failed to open a channel")
+	defer ch.Close()
+
+	err = ch.ExchangeDeclare(
+		"ddrun",  // name
+		"fanout", // type
+		true,     // durable
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
+	)
+	failOnError(err, "Failed to declare an exchange")
+
+	q, err := ch.QueueDeclare(
+		"ddrun", // name
+		false,   // durable
+		false,   // delete when unused
+		true,    // exclusive
+		false,   // no-wait
+		nil,     // arguments
+	)
+	failOnError(err, "Failed to declare a queue")
+
+	err = ch.QueueBind(
+		q.Name,  // queue name
+		"",      // routing key
+		"ddrun", // exchange
+		false,
+		nil)
+	failOnError(err, "Failed to bind a queue")
+
+	msgs, err := ch.Consume(
+		q.Name, // queue
+		"",     // consumer
+		true,   // auto-ack
+		false,  // exclusive
+		false,  // no-local
+		false,  // no-wait
+		nil,    // args
+	)
+	failOnError(err, "Failed to register a consumer")
+
+	forever := make(chan bool)
+
+	// go func() {
+	for d := range msgs {
+		log.Printf(" [x] %s", d.Body)
+		executePipelines()
+	}
+	// }()
+
+	log.Printf(" [*] Waiting for %s. To exit press CTRL+C", q.Name)
+	<-forever
+
+}
+
+func executePipelines() {
 	hostConfig, err := config.ReadApplicationConfig("pipefired")
 
 	if err != nil {
@@ -69,9 +149,8 @@ func main() {
 
 	// @todo load and execute pipelines concurrently
 	// execute pipeline
-	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
 
-	// err = executePipelines(conf)
+	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
 	if pipelineErrors != nil && len(pipelineErrors) > 0 {
 		for _, err := range pipelineErrors {
 			log.Error(err.Error())
@@ -80,6 +159,7 @@ func main() {
 	} else {
 		log.Info("Direct Debit Pipeline Complete")
 	}
+
 }
 
 func initLogging(lvl string) {
