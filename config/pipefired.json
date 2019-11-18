@@ -11,6 +11,34 @@
                 "dbname": "pipefire",
                 "allowNativePasswords": true
             },
+            "rabbitmq": {
+                "user": "guest",
+                "password": "guest",
+                "host": "172.20.1.6",
+                "port": "5672",
+                "vhost": "/",
+                "exchanges": [
+                    {
+                        "name":  "ddrun",
+                        "type": "fanout"
+                    }
+                ],
+                "queues": [
+                    {
+                        "name": "ddrun",
+                        "durable": false,
+                        "deleteOnUnused": true,
+                        "exclusive": true,
+                        "noWait": true,
+                        "args": "",
+                        "bindings": {
+                            "routingKey": "",
+                            "exchange": ""
+
+                        }
+                    }
+                ] 
+            },
             "transferLog": {
                 "table": "FileTransfers"
             },
