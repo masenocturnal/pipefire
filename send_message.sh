@@ -13,4 +13,4 @@ payload="{
  }
 }"
 
-rabbitmqadmin publish -V / exchange=ddrun routing_key="" payload="$payload";
+~/bin/rabbitmqadmin publish -V / exchange=ddrun routing_key="" payload="$payload";

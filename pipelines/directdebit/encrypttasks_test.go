@@ -50,7 +50,7 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 	}
 	logEntry := log.WithField("test", "test")
 
-	ddConfig := &Config{}
+	ddConfig := &PipelineConfig{}
 	ddConfig.Tasks = *tasksConfig
 
 	pipeline, err := New(ddConfig, logEntry)

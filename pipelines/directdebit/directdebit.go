@@ -7,6 +7,7 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 )
 
 // Pipeline is an implementation of a pipeline
@@ -32,23 +33,27 @@ type TasksConfig struct {
 	CleanDirtyFiles    CleanUpConfig      `json:"cleanDirtyFiles"`
 }
 
-// Config defines the required arguements for the pipeline
-type Config struct {
-	Database mysql.Config `json:"database"`
-	Tasks    TasksConfig  `json:"tasks"`
+// PipelineConfig defines the required arguements for the pipeline
+type PipelineConfig struct {
+	Database     mysql.Config `json:"database"`
+	MessageQueue BusConfig    `json:"rabbitmq"`
+	Tasks        TasksConfig  `json:"tasks"`
 }
 
 type ddPipeline struct {
 	log           *log.Entry
 	correlationID string
 	transferlog   *TransferLog
-	taskConfig    *Config
+	taskConfig    *PipelineConfig
 }
 
 // New Pipeline
-func New(config *Config, log *log.Entry) (Pipeline, error) {
+func New(config *PipelineConfig, log *log.Entry) (Pipeline, error) {
 
-	var p *ddPipeline
+	var p *ddPipeline = &ddPipeline{
+		taskConfig: config,
+		log:        log,
+	}
 
 	if config.Database.Addr != "" {
 		dbConfig := config.Database
@@ -75,19 +80,63 @@ func New(config *Config, log *log.Entry) (Pipeline, error) {
 		db.SetLogger(log)
 		db.LogMode(true)
 
-		p = &ddPipeline{
-			taskConfig:  config,
-			log:         log,
-			transferlog: NewRecorder(db, log),
+		p.transferlog = NewRecorder(db, log)
+	}
+	x := config.MessageQueue
+	_ = x
+	y := x.User
+	_ = y
+	v := x.Host
+	_ = v
+
+	if config.MessageQueue.Host != "" {
+		//go setupMessageListeners(&config.MessageQueue)
+		connString := config.MessageQueue.ConnectionString()
+		log.Debug(connString)
+
+		conn, err := amqp.Dial(connString)
+
+		failOnError(err, "Failed to connect to RabbitMQ")
+		defer conn.Close()
+
+		ch, err := configureMessageBus(conn, &config.MessageQueue)
+
+		// will this actually work ?
+		defer ch.Close()
+
+		// not convinced this is the best way to go
+		deliveryChannel, err := ch.Consume(
+			"ddrun",             // queue
+			"pipefire_instance", // consumer
+			true,                // auto-ack
+			false,               // exclusive
+			false,               // no-local
+			false,               // no-wait
+			nil,                 // args
+		)
+
+		failOnError(err, "Failed to register a consumer")
+
+		forever := make(chan bool)
+
+		// go func() {
+		for d := range deliveryChannel {
+			log.Printf(" [x] %s", d.Body)
+			//executePipelines()
 		}
-	} else {
-		p = &ddPipeline{
-			taskConfig: config,
-			log:        log,
-		}
+		// }()
+
+		log.Printf(" [*] Waiting for %s. To exit press CTRL+C", config.MessageQueue.Host)
+		<-forever
 	}
 
 	return p, nil
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Errorf("%s: %s", msg, err)
+	}
 }
 
 // Execute starts the execution of the pipeline
