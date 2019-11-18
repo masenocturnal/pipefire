@@ -12,35 +12,7 @@
                 "allowNativePasswords": true
             },
             "rabbitmq": {
-                "user": "guest",
-                "password": "guest",
-                "host": "172.20.1.6",
-                "port": "5672",
-                "vhost": "/",
-                "exchanges": [
-                    {
-                        "name":  "ddrun",
-                        "type": "fanout"
-                    }
-                ],
-                "queues": [
-                    {
-                        "name": "ddrun",
-                        "durable": false,
-                        "deleteOnUnused": true,
-                        "exclusive": true,
-                        "noWait": true,
-                        "args": "",
-                        "bindings": {
-                            "routingKey": "",
-                            "exchange": ""
-
-                        }
-                    }
-                ] 
-            },
-            "transferLog": {
-                "table": "FileTransfers"
+                "user": "guest"             
             },
             "tasks": {
                 "getFilesFromBFP": {
@@ -54,7 +26,7 @@
                         "keyPassword": "",
                         "port": 22
                     },
-                    "enabled": true
+                    "enabled": false
                 },
                 "cleanBFP": {
                     "remoteDir": "./Pickup",
@@ -79,7 +51,7 @@
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
-                            "decryptionKey": "",                            
+                            "decryptionKey": "",
                             "srcDir": "GA",
                             "destDir": "GA",
                             "enabled": true
@@ -94,7 +66,7 @@
                             "srcDir": "PX",
                             "destDir": "PX",
                             "enabled": true
-                        }        
+                        }
                     },
                     "enabled": false
                 },
@@ -123,18 +95,18 @@
                         "port": 22
                     },
                     "enabled": false
-                },                
+                },
                 "archiveTransferred": {
                     "src": "/tmp/ddrun/Encrypted",
                     "dest": "/tmp/send_files/",
-                    "enabled": true
+                    "enabled": false
                 },
                 "cleanDirtyFiles": {
                     "paths": [
                         "/tmp/ddrun/Pickup/",
                         "/tmp/ddrun/Encrypted"
                     ],
-                    "enabled": true
+                    "enabled": false
                 }
             }
         }
