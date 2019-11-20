@@ -1,16 +1,18 @@
 #!/bin/bash
 
+vhost="banking"
+exchange="BankFileProcessor.Incoming"
 uuid=`uuidgen`
 currDate=`date -I`
-payload="{
- \"messageType\": [
-   \"urn:message:Pipefire:Pipeline:DDRun:TransferFiles\"
- ],
- \"message\": {
-   \"task\": \"begin\",
-   \"start_date\": \"${currDate}\",
-   \"correlationId\": \"${uuid}\"
- }
+payload="{ 
+  \"messageType\": [   
+      \"urn:message:Certegy.DirectDebit.Messaging.Contracts.Payload:BankTransferPayload\" 
+  ], 
+  \"message\": {   
+    \"task\": \"transfer\",   
+    \"start_date\": \"$curDate\",   
+    \"correlationId\": \"$uuid\" 
+  }
 }"
 
-~/bin/rabbitmqadmin publish -V / exchange=ddrun routing_key="" payload="$payload";
+rabbitmqadmin publish -V "$vhost" exchange="$exchange" routing_key="" payload="$payload";

@@ -4,7 +4,7 @@
     "pipelines": {
         "directdebit": {
             "database": {
-                "user": "pipefire",
+                "user": "root",
                 "net": "tcp",
                 "addr": "localhost:3306",
                 "passwd": "foobar123",
@@ -12,7 +12,55 @@
                 "allowNativePasswords": true
             },
             "rabbitmq": {
-                "user": "guest"             
+                "user": "guest",
+                "password": "guest",
+                "host": "172.20.1.6",
+                "port": "5672",
+                "vhost": "banking",
+                "exchanges": [
+                    {
+                        "name": "BankFileProcessor.Incoming",
+                        "exchangeType": "fanout",
+                        "durable": true
+                    },
+                    {
+                        "name": "BankFileProcessor.Incoming_error",
+                        "exchangeType": "fanout",
+                        "durable": true
+                    }
+                ],
+                "queues": [
+                    {
+                        "name": "BankFileProcessor.Incoming",
+                        "durable": true,
+                        "deleteOnUnused": true,
+                        "exclusive": true,
+                        "noWait": true,
+                        "args": "",
+                        "bindings": [
+                            {
+                                "routingKey": "",
+                                "exchange": "BankFileProcessor.Incoming"
+
+                            }
+                        ]
+                    },
+                    {
+                        "name": "BankFileProcessor.Incoming_error",
+                        "durable": true,
+                        "deleteOnUnused": true,
+                        "exclusive": true,
+                        "noWait": true,
+                        "args": "",
+                        "bindings": [
+                            {
+                                "routingKey": "",
+                                "exchange": "BankFileProcessor.Incoming_error"
+
+                            }
+                        ]
+                    }
+                ]
             },
             "tasks": {
                 "getFilesFromBFP": {

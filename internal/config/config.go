@@ -24,6 +24,7 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 
 	// conf := micro.NewConfig()
 	conf := viper.New()
+	//conf.Set("Verbose", true)
 	conf.SetConfigName(configName)
 	conf.AddConfigPath("/etc/pipefire/")
 	conf.AddConfigPath("../config/")
@@ -31,11 +32,13 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
+
 	if err != nil {
 		return nil, err
 	}
 	hostConfig := &HostConfig{}
 	err = conf.Unmarshal(hostConfig)
+	// conf.Debug()
 
 	// @todo validation
 	return hostConfig, err

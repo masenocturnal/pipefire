@@ -1,18 +1,21 @@
 package directdebit
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"runtime"
 	"strings"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
-	"github.com/streadway/amqp"
 )
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	Execute(correlationID string) (errorList []error)
+	StartListener(chan error)
+	Execute(string) []error
 	Close() error
 	sftpGet(conf *SftpConfig) error
 	sftpTo(conf *SftpConfig) error
@@ -35,27 +38,28 @@ type TasksConfig struct {
 
 // PipelineConfig defines the required arguements for the pipeline
 type PipelineConfig struct {
-	Database     mysql.Config `json:"database"`
-	MessageQueue BusConfig    `json:"rabbitmq"`
-	Tasks        TasksConfig  `json:"tasks"`
+	Database mysql.Config `json:"database"`
+	Rabbitmq BusConfig    `json:"rabbitmq"`
+	Tasks    TasksConfig  `json:"tasks"`
 }
 
 type ddPipeline struct {
 	log           *log.Entry
 	correlationID string
+	consumer      *MessageConsumer
 	transferlog   *TransferLog
 	taskConfig    *PipelineConfig
 }
 
 // New Pipeline
-func New(config *PipelineConfig, log *log.Entry) (Pipeline, error) {
+func New(config *PipelineConfig) (Pipeline, error) {
 
 	var p *ddPipeline = &ddPipeline{
 		taskConfig: config,
-		log:        log,
+		log:        log.WithField("Pipeline", "DirectDebit"),
 	}
 
-	if config.Database.Addr != "" {
+	if false && config.Database.Addr != "" {
 		dbConfig := config.Database
 		dbConfig.ParseTime = true
 
@@ -67,7 +71,7 @@ func New(config *PipelineConfig, log *log.Entry) (Pipeline, error) {
 
 		log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
 
-		if err := mysql.SetLogger(log); err != nil {
+		if err := mysql.SetLogger(p.log); err != nil {
 			return nil, err
 		}
 
@@ -77,74 +81,82 @@ func New(config *PipelineConfig, log *log.Entry) (Pipeline, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Unable to connect to the database: %s", err.Error())
 		}
-		db.SetLogger(log)
+		db.SetLogger(p.log)
 		db.LogMode(true)
 
-		p.transferlog = NewRecorder(db, log)
+		p.transferlog = NewRecorder(db, p.log)
 	}
-	x := config.MessageQueue
-	_ = x
-	y := x.User
-	_ = y
-	v := x.Host
-	_ = v
 
-	if config.MessageQueue.Host != "" {
-		//go setupMessageListeners(&config.MessageQueue)
-		connString := config.MessageQueue.ConnectionString()
-		log.Debug(connString)
-
-		conn, err := amqp.Dial(connString)
-
-		failOnError(err, "Failed to connect to RabbitMQ")
-		defer conn.Close()
-
-		ch, err := configureMessageBus(conn, &config.MessageQueue)
-
-		// will this actually work ?
-		defer ch.Close()
-
-		// not convinced this is the best way to go
-		deliveryChannel, err := ch.Consume(
-			"ddrun",             // queue
-			"pipefire_instance", // consumer
-			true,                // auto-ack
-			false,               // exclusive
-			false,               // no-local
-			false,               // no-wait
-			nil,                 // args
-		)
-
-		failOnError(err, "Failed to register a consumer")
-
-		forever := make(chan bool)
-
-		// go func() {
-		for d := range deliveryChannel {
-			log.Printf(" [x] %s", d.Body)
-			//executePipelines()
+	if config.Rabbitmq.Host != "" {
+		consumer, err := NewConsumer(&config.Rabbitmq, p.log)
+		if err != nil {
+			return nil, err
 		}
-		// }()
-
-		log.Printf(" [*] Waiting for %s. To exit press CTRL+C", config.MessageQueue.Host)
-		<-forever
+		p.consumer = &consumer
 	}
 
 	return p, nil
 }
 
-func failOnError(err error, msg string) {
-	if err != nil {
-		log.Errorf("%s: %s", msg, err)
+func (p *ddPipeline) StartListener(errCh chan error) {
+
+	consumer := *p.consumer
+
+	if err := consumer.Configure(); err != nil {
+		p.log.Errorf("Unable to register Exchanges and Queues", err.Error())
 	}
+
+	deliveryChannel, err := consumer.Consume()
+	if err != nil {
+		p.log.Error("Unable to Consume Messages %s", err.Error())
+
+		// Send the error to the channel
+		errCh <- err
+	}
+
+	log.Info("Consumer Registered Listening")
+
+	for d := range deliveryChannel {
+		log.Tracef("Message Body: [x] %s", d.Body)
+		log.Debugf("#goroutines: %d\n", runtime.NumGoroutine())
+		// json decode
+		payload := &TransferFilesPayload{}
+		if err := json.Unmarshal(d.Body, payload); err != nil {
+			// @todo publish message to the error queue
+			log.Error("Unable to unmarshal the message. Please ensure that the message is valid")
+			log.Error("Invalid Message is %s ", d.Body)
+		}
+
+		correlationID := payload.Message.CorrelationID
+
+		if len(correlationID) > 0 {
+			errs := p.Execute(correlationID)
+			if len(errs) > 0 {
+				log.Warning("Pipeline Completed With Errors")
+				for _, e := range errs {
+					log.Error(e.Error())
+				}
+			} else {
+				log.Info("Pipeline Completed Without Errors")
+			}
+		} else {
+			log.Error("Message payload did not include a correlationId, aborting. Resend Message with a correlationId")
+		}
+
+	}
+
+	log.Warning("Listener Stopped")
+	errCh <- errors.New("Channel went away")
 }
 
 // Execute starts the execution of the pipeline
-func (p ddPipeline) Execute(correlationID string) (errorList []error) {
+func (p *ddPipeline) Execute(correlationID string) (errorList []error) {
+
 	p.correlationID = correlationID
+	p.log = log.WithField("correlationId", correlationID)
 
 	// @todo put this into a workflow
-	p.log.Info("Starting Direct Debit Pipeline")
+	log.Info("Starting Direct Debit Pipeline")
 
 	// @todo config validation
 	// @todo turn into loop
@@ -188,22 +200,39 @@ func (p ddPipeline) Execute(correlationID string) (errorList []error) {
 	}
 
 	if len(errorList) > 0 {
-		p.log.Error("END DD Pipeline with Errors")
+		log.Error("END DD Pipeline with Errors")
 	} else {
-		p.log.Info("END DD Pipeline Without Errors")
+		log.Info("END DD Pipeline Without Errors")
 	}
 
 	return errorList
 }
 
-func (p ddPipeline) Close() error {
-	if err := p.transferlog.Conn.Close(); err != nil {
-		p.log.Warningf("Error closing database connecton, %s", err.Error())
+func (p *ddPipeline) Close() error {
+	p.log.Info("Recieved Shutdown Request")
+	if p.transferlog != nil && p.transferlog.Conn != nil {
+		p.log.Info("Shutdown Database Connection")
+		if err := p.transferlog.Conn.Close(); err != nil {
+			p.log.Warningf("Error closing database connecton, %s", err.Error())
+		}
+		p.log.Info("Shutdown Database Complete")
 	}
+
+	if p.consumer != nil {
+		p.log.Info("Shutdown RabbitMQ Connection")
+		consumer := *p.consumer
+		if err := consumer.Close(); err != nil {
+			p.log.Warningf("Error closing RabbitMQ connecton, %s", err.Error())
+			return err
+		}
+		p.log.Info("Shutdown RabbitMQ Complete")
+	}
+
+	p.log.Info("Shutdown Complete")
 	return nil
 }
 
-func (p ddPipeline) archive() error {
+func (p *ddPipeline) archive() error {
 	p.log.Info("Archiving Transferred Files")
 
 	archiveConfig := p.taskConfig.Tasks.ArchiveTransferred
@@ -220,7 +249,7 @@ func (p ddPipeline) archive() error {
 	return nil
 }
 
-func (p ddPipeline) cleanUp() (err []error) {
+func (p *ddPipeline) cleanUp() (err []error) {
 	p.log.Info("Clean Up Start")
 	cleanUpConfig := p.taskConfig.Tasks.CleanDirtyFiles
 	if cleanUpConfig.Enabled {
@@ -233,7 +262,7 @@ func (p ddPipeline) cleanUp() (err []error) {
 	return err
 }
 
-func (p ddPipeline) getFilesFromBFP() error {
+func (p *ddPipeline) getFilesFromBFP() error {
 
 	p.log.Info("GetFilesFromBFP Start")
 	bfpSftp := p.taskConfig.Tasks.GetFilesFromBFP
@@ -250,7 +279,7 @@ func (p ddPipeline) getFilesFromBFP() error {
 	return nil
 }
 
-func (p ddPipeline) cleanBFP() error {
+func (p *ddPipeline) cleanBFP() error {
 
 	p.log.Info("CleanBFP Start")
 	bfpClean := p.taskConfig.Tasks.CleanBFP
@@ -265,7 +294,7 @@ func (p ddPipeline) cleanBFP() error {
 	return nil
 }
 
-func (p ddPipeline) encryptFiles() []error {
+func (p *ddPipeline) encryptFiles() []error {
 	p.log.Info("EncryptFiles Start")
 	encryptionConfig := p.taskConfig.Tasks.EncryptFiles
 	if encryptionConfig.Enabled {
@@ -280,7 +309,7 @@ func (p ddPipeline) encryptFiles() []error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToANZ() error {
+func (p *ddPipeline) sftpFilesToANZ() error {
 
 	p.log.Info("SftpFilesToANZ Start")
 
@@ -297,7 +326,7 @@ func (p ddPipeline) sftpFilesToANZ() error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToPx() error {
+func (p *ddPipeline) sftpFilesToPx() error {
 	p.log.Info("SftpFilesToPx Start")
 	pxSftp := p.taskConfig.Tasks.SftpFilesToPx
 	if pxSftp.Enabled {
@@ -312,7 +341,7 @@ func (p ddPipeline) sftpFilesToPx() error {
 	return nil
 }
 
-func (p ddPipeline) sftpFilesToBNZ() error {
+func (p *ddPipeline) sftpFilesToBNZ() error {
 	p.log.Info("SftpFilesToBNZ Start")
 
 	bnzSftp := p.taskConfig.Tasks.SftpFilesToBNZ
