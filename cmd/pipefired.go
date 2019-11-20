@@ -7,7 +7,6 @@ import (
 	"strings"
 	"syscall"
 
-	uuid "github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
 	"github.com/sevlyar/go-daemon"
@@ -35,17 +34,18 @@ func main() {
 	// create the channel to handle the OS Signal
 	signalChannel := make(chan os.Signal, 1)
 
-	// ask to be notified of
+	// ask to be notified of signals. @todo we actually need to deal with this differently
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGHUP)
-
-	executePipelines()
+	go executePipelines()
 	<-signalChannel
 	fmt.Println("Pipefire Shutting Down")
+	//
 	os.Exit(0)
 
 }
 
 func executePipelines() {
+	// @todo shift this to the pipeline
 	hostConfig, err := config.ReadApplicationConfig("pipefired")
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
@@ -58,17 +58,12 @@ func executePipelines() {
 		os.Exit(1)
 	}
 	initLogging(hostConfig.LogLevel)
-	correlationID := uuid.New()
-
-	logEntry := log.WithFields(log.Fields{
-		"correlationId": correlationID,
-	})
 
 	// @todo make this dynamic
 	ddConfig := hostConfig.Pipelines.DirectDebit
 
 	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(&ddConfig, logEntry)
+	directDebitPipeline, err := directdebit.New(&ddConfig)
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
@@ -77,16 +72,13 @@ func executePipelines() {
 
 	// @todo load and execute pipelines concurrently
 	// execute pipeline
+	errCh := make(chan error)
 
-	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
-	if pipelineErrors != nil && len(pipelineErrors) > 0 {
-		for _, err := range pipelineErrors {
-			log.Error(err.Error())
-		}
-		log.Info("Direct Debit Pipeline Complete with Errors")
-	} else {
-		log.Info("Direct Debit Pipeline Complete")
-	}
+	go directDebitPipeline.StartListener(errCh)
+	x := <-errCh
+
+	log.Errorf("Critical Error %s ", x.Error())
+	//directDebitPipeline.Close()
 
 }
 
