@@ -66,7 +66,7 @@ type TransferFilesPayload struct {
 //MessagePayload represents the message content in a TransferFilesPayload from the message bus
 type MessagePayload struct {
 	Task          string
-	StartDate     string `json:start_date`
+	StartDate     string `json:"start_date"`
 	CorrelationID string
 }
 
@@ -102,7 +102,7 @@ func (c *messageConsumer) Configure() (err error) {
 			err = c.Channel.ExchangeDeclare(
 				ex.Name,         // name
 				ex.ExchangeType, // type
-				ex.Durable,      // durable
+				true,            // durable
 				false,           // auto-deleted
 				false,           // internal
 				false,           // no-wait
@@ -118,7 +118,7 @@ func (c *messageConsumer) Configure() (err error) {
 		for _, qConfig := range c.config.Queues {
 			q, err := c.Channel.QueueDeclare(
 				qConfig.Name,           // name
-				qConfig.Durable,        // durable
+				true,                   // durable
 				qConfig.DeleteOnUnused, // delete when unused
 				true,                   // exclusive
 				false,                  // no-wait
