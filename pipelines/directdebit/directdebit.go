@@ -59,7 +59,7 @@ func New(config *PipelineConfig) (Pipeline, error) {
 		log:        log.WithField("Pipeline", "DirectDebit"),
 	}
 
-	if false && config.Database.Addr != "" {
+	if config.Database.Addr != "" {
 		dbConfig := config.Database
 		dbConfig.ParseTime = true
 
