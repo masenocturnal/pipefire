@@ -20,7 +20,9 @@ services:
     image: "masenocturnal/sshd:latest" 
     environment:
       SSH_USERS: "test:1002:1002"
-      SFTP_MODE: "true"      
+      SFTP_MODE: "true" 
+    ports:
+      - 22
     volumes:
       - ./bfp:/data
       - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
@@ -30,11 +32,12 @@ services:
   anz:
     image: "masenocturnal/sshd:latest"      
     environment:
-      SSH_USERS: "test:1002:1002"
-      SFTP_MODE: "true"      
+      SSH_USERS: "test:1002:1002"      
+    ports:
+      - 22
     volumes:
-      - ./data:/data
       - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
+      - sftp-data:/data
     networks:
       app_net:
         ipv4_address: 172.20.1.4
@@ -42,10 +45,11 @@ services:
     image: "masenocturnal/sshd:latest"    
     environment:
       SSH_USERS: "test:1002:1002"
-      SFTP_MODE: "true"
+    ports:
+      - 22
     volumes:
-      - ./data:/data
       - ~/.ssh/id_rsa.pub:/etc/authorized_keys/test
+      - sftp-data:/data
     networks:
       app_net:
         ipv4_address: 172.20.1.5
@@ -64,4 +68,6 @@ networks:
     ipam:
       config:
         - subnet: 172.20.1.0/24
-          
+
+volumes:
+  sftp-data:
