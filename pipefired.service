@@ -1,0 +1,16 @@
+[Unit]
+Description=Pipefire Transport Pipelines
+After=network.target
+
+[Service]
+User=andmas
+Group=andmas
+PIDFile=/run/pipefired/pipefired.pid
+OOMScoreAdjust=-900
+ExecStart=/home/andmas/go/src/github.com/masenocturnal/pipefire/cmd/pipefired_v0.9.11
+EnvironmentFile=-/etc/environment
+Restart=always
+WatchdogSec=2m
+
+[Install]
+WantedBy=multi-user.target
