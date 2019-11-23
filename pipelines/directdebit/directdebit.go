@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/google/uuid"
+
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
@@ -117,7 +119,7 @@ func (p *ddPipeline) StartListener(errCh chan error) {
 	log.Info("Consumer Registered Listening")
 
 	for d := range deliveryChannel {
-		log.Tracef("Message Body: [x] %s", d.Body)
+		log.Tracef("Message Body: [%s] ", d.Body)
 		log.Debugf("#goroutines: %d\n", runtime.NumGoroutine())
 		// json decode
 		payload := &TransferFilesPayload{}
@@ -128,6 +130,11 @@ func (p *ddPipeline) StartListener(errCh chan error) {
 		}
 
 		correlationID := payload.Message.CorrelationID
+		if correlationID == "" || correlationID == "00000000-0000-0000-0000-000000000000" {
+			// generate a unique one
+			log.Warn("invalid uuid. Generating a new one")
+			correlationID = uuid.New().String()
+		}
 
 		if len(correlationID) > 0 {
 			errs := p.Execute(correlationID)
