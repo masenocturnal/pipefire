@@ -9,7 +9,7 @@ import (
 
 //Pipelines top level =pipeline configuration
 type Pipelines struct {
-	DirectDebit directdebit.Config `json:"directdebit"`
+	DirectDebit directdebit.PipelineConfig `json:"directdebit"`
 }
 
 // HostConfig data structure that represent a valid configuration file
@@ -17,8 +17,6 @@ type HostConfig struct {
 	LogLevel   string    `json:"loglevel"`
 	Background bool      `json:"background"`
 	Pipelines  Pipelines `json:"piplines"`
-	// Sftp       map[string]sftp.Endpoint         `json:"sftp"`
-	// Crypto     map[string]crypto.ProviderConfig `json:"crypto"`
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
@@ -26,6 +24,7 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 
 	// conf := micro.NewConfig()
 	conf := viper.New()
+	//conf.Set("Verbose", true)
 	conf.SetConfigName(configName)
 	conf.AddConfigPath("/etc/pipefire/")
 	conf.AddConfigPath("../config/")
@@ -33,8 +32,13 @@ func ReadApplicationConfig(configName string) (*HostConfig, error) {
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
+
+	if err != nil {
+		return nil, err
+	}
 	hostConfig := &HostConfig{}
-	conf.Unmarshal(hostConfig)
+	err = conf.Unmarshal(hostConfig)
+	// conf.Debug()
 
 	// @todo validation
 	return hostConfig, err

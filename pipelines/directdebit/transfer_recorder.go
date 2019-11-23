@@ -108,7 +108,7 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 //RecordError Updates the transfer record in the database to record the error message
 func (t TransferLog) RecordError(txn *gorm.DB, rec *Record) error {
 
-	sql := "local_file_hash = ? and remote_host = ? and deleted_at IS NULL"
+	sql := "local_file_hash = ? and remote_host = ? and correlation_id = ?"
 
 	result := txn.
 		Model(rec).

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
-	uuid "github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
 	"github.com/sevlyar/go-daemon"
@@ -12,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.9"
+const version string = "0.9.10"
 
 func main() {
 
@@ -27,18 +29,24 @@ func main() {
 	}
 	_ = cntxt
 
-	// d, err := cntxt.Reborn()
-	// if err != nil {
-	// 	log.Fatal("Unable to run: ", err)
-	// }
-	// if d != nil {
-	// 	return
-	// }
-	// defer cntxt.Release()
-
 	log.Infof("PipeFire Daemon Started. Version : %s ", version)
-	hostConfig, err := config.ReadApplicationConfig("pipefired")
 
+	// create the channel to handle the OS Signal
+	signalChannel := make(chan os.Signal, 1)
+
+	// ask to be notified of signals. @todo we actually need to deal with this differently
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGHUP)
+	go executePipelines()
+	<-signalChannel
+	fmt.Println("Pipefire Shutting Down")
+	//
+	os.Exit(0)
+
+}
+
+func executePipelines() {
+	// @todo shift this to the pipeline
+	hostConfig, err := config.ReadApplicationConfig("pipefired")
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
@@ -50,17 +58,12 @@ func main() {
 		os.Exit(1)
 	}
 	initLogging(hostConfig.LogLevel)
-	correlationID := uuid.New()
-
-	logEntry := log.WithFields(log.Fields{
-		"correlationId": correlationID,
-	})
 
 	// @todo make this dynamic
 	ddConfig := hostConfig.Pipelines.DirectDebit
 
 	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(&ddConfig, logEntry)
+	directDebitPipeline, err := directdebit.New(&ddConfig)
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)
@@ -69,17 +72,14 @@ func main() {
 
 	// @todo load and execute pipelines concurrently
 	// execute pipeline
-	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
+	errCh := make(chan error)
 
-	// err = executePipelines(conf)
-	if pipelineErrors != nil && len(pipelineErrors) > 0 {
-		for _, err := range pipelineErrors {
-			log.Error(err.Error())
-		}
-		log.Info("Direct Debit Pipeline Complete with Errors")
-	} else {
-		log.Info("Direct Debit Pipeline Complete")
-	}
+	go directDebitPipeline.StartListener(errCh)
+	x := <-errCh
+
+	log.Errorf("Critical Error %s ", x.Error())
+	//directDebitPipeline.Close()
+
 }
 
 func initLogging(lvl string) {

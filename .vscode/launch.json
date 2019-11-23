@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceRoot}/cmd/pipefired.go",
-            "useApiV1": false,
+            "apiVersion": 2,
             "dlvLoadConfig": {
                 "followPointers": true,
                 "maxVariableRecurse": 1,

@@ -4,15 +4,63 @@
     "pipelines": {
         "directdebit": {
             "database": {
-                "user": "pipefire",
+                "user": "root",
                 "net": "tcp",
                 "addr": "localhost:3306",
                 "passwd": "foobar123",
                 "dbname": "pipefire",
                 "allowNativePasswords": true
             },
-            "transferLog": {
-                "table": "FileTransfers"
+            "rabbitmq": {
+                "user": "guest",
+                "password": "guest",
+                "host": "172.20.1.6",
+                "port": "5672",
+                "vhost": "banking",
+                "exchanges": [
+                    {
+                        "name": "BankFileTransfer.Incoming",
+                        "exchangeType": "fanout",
+                        "durable": true
+                    },
+                    {
+                        "name": "BankFileTransfer.Incoming_error",
+                        "exchangeType": "fanout",
+                        "durable": true
+                    }
+                ],
+                "queues": [
+                    {
+                        "name": "BankFileProcessor.Incoming",
+                        "durable": true,
+                        "deleteOnUnused": true,
+                        "exclusive": true,
+                        "noWait": true,
+                        "args": "",
+                        "bindings": [
+                            {
+                                "routingKey": "",
+                                "exchange": "BankFileProcessor.Incoming"
+
+                            }
+                        ]
+                    },
+                    {
+                        "name": "BankFileProcessor.Incoming_error",
+                        "durable": true,
+                        "deleteOnUnused": true,
+                        "exclusive": true,
+                        "noWait": true,
+                        "args": "",
+                        "bindings": [
+                            {
+                                "routingKey": "",
+                                "exchange": "BankFileProcessor.Incoming_error"
+
+                            }
+                        ]
+                    }
+                ]
             },
             "tasks": {
                 "getFilesFromBFP": {
@@ -42,7 +90,7 @@
                     "enabled": false
                 },
                 "encryptFiles": {
-                    "srcDir": "/tmp/ddrun/Pickup/",
+                    "srcDir": "/tmp/ddrun/Pickup",
                     "outputDir": "/tmp/ddrun/Encrypted",
                     "providers": {
                         "anz": {
@@ -51,9 +99,9 @@
                             "signingKey": "",
                             "signingKeyPassword": "",
                             "encryptionKeyPassword": "",
-                            "decryptionKey": "",                            
+                            "decryptionKey": "",
                             "srcDir": "GA",
-                            "destDir": "GA",
+                            "destDir": "ANZ",
                             "enabled": true
                         },
                         "px": {
@@ -66,36 +114,36 @@
                             "srcDir": "PX",
                             "destDir": "PX",
                             "enabled": true
-                        }        
+                        }
                     },
-                    "enabled": false
+                    "enabled": true
                 },
                 "sftpFilesToANZ": {
                     "localDir": "/tmp/ddrun/Encrypted/ANZ",
                     "remoteDir": "./Out/Certegy/DE/",
                     "sftp": {
-                        "host": "localhost",
-                        "key": "",
+                        "host": "172.20.1.4",
+                        "key": "~/.ssh/id_rsa",
                         "username": "test",
                         "password": "",
                         "keyPassword": "",
-                        "port": 3389
+                        "port": 22
                     },
-                    "enabled": false
+                    "enabled": true
                 },
                 "sftpFilesToPx": {
                     "localDir": "/tmp/ddrun/Encrypted/PX",
                     "remoteDir": "./In",
                     "sftp": {
-                        "host": "",
-                        "key": "",
-                        "username": "ubuntu",
+                        "host": "172.20.1.5",
+                        "key": "~/.ssh/id_rsa",
+                        "username": "test",
                         "password": "",
                         "keyPassword": "",
                         "port": 22
                     },
-                    "enabled": false
-                },                
+                    "enabled": true
+                },
                 "archiveTransferred": {
                     "src": "/tmp/ddrun/Encrypted",
                     "dest": "/tmp/send_files/",
