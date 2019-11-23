@@ -105,12 +105,12 @@ func (p *ddPipeline) StartListener(errCh chan error) {
 	consumer := *p.consumer
 
 	if err := consumer.Configure(); err != nil {
-		p.log.Errorf("Unable to register Exchanges and Queues", err.Error())
+		p.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
 	}
 
 	deliveryChannel, err := consumer.Consume()
 	if err != nil {
-		p.log.Error("Unable to Consume Messages %s", err.Error())
+		p.log.Errorf("Unable to Consume Messages %s", err.Error())
 
 		// Send the error to the channel
 		errCh <- err
@@ -126,7 +126,7 @@ func (p *ddPipeline) StartListener(errCh chan error) {
 		if err := json.Unmarshal(d.Body, payload); err != nil {
 			// @todo publish message to the error queue
 			log.Error("Unable to unmarshal the message. Please ensure that the message is valid")
-			log.Error("Invalid Message is %s ", d.Body)
+			log.Errorf("Invalid Message is %s ", d.Body)
 		}
 
 		correlationID := payload.Message.CorrelationID
