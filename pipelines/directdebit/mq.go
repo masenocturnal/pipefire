@@ -3,6 +3,7 @@ package directdebit
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -93,6 +94,38 @@ func NewConsumer(config *BusConfig, log *log.Entry) (MessageConsumer, error) {
 	consumer.Channel, err = conn.Channel()
 
 	return consumer, err
+}
+
+func establishConnection(uri string) *amqp.Connection {
+	for {
+		conn, err := amqp.Dial(uri)
+
+		if err == nil {
+			return conn
+		}
+
+		log.Println(err)
+		log.Printf("Trying to reconnect to RabbitMQ at %s\n", uri)
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func rabbitConnector(uri string) {
+	var rabbitErr *amqp.Error
+	var rabbitCloseError chan *amqp.Error
+
+	for {
+		rabbitErr = <-rabbitCloseError
+		if rabbitErr != nil {
+			log.Printf("Connecting to %s\n", *amqpUri)
+
+			rabbitConn := establishConnection(uri)
+			rabbitCloseError = make(chan *amqp.Error)
+			rabbitConn.NotifyClose(rabbitCloseError)
+
+			// run your setup process here
+		}
+	}
 }
 
 func (c *messageConsumer) Configure() (err error) {
