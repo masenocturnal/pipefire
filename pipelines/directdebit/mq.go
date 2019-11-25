@@ -15,8 +15,8 @@ type BusConfig struct {
 	Host      string
 	Port      string
 	Vhost     string
-	Exchanges []ExchangeConfig
-	Queues    []QueueConfig
+	Exchanges []*ExchangeConfig
+	Queues    []*QueueConfig `json:"queues"`
 }
 
 //ExchangeConfig RabbbitMQ Exchange configuration
@@ -29,11 +29,11 @@ type ExchangeConfig struct {
 //QueueConfig RabbitMQ Queue definition
 type QueueConfig struct {
 	Name           string
-	Durable        bool
-	DeleteOnUnused bool
-	Exclusive      bool
-	NoWait         bool
-	Args           string
+	Durable        bool            `json:"durable"`
+	DeleteOnUnused bool            `json:"deleteOnUnused"`
+	Exclusive      bool            `json:"exclusive"`
+	NoWait         bool            `json:"noWait"`
+	Args           string          `json:"args"`
 	Bindings       []BindingConfig `json:"bindings"`
 }
 
@@ -102,7 +102,7 @@ func (c *messageConsumer) Configure() (err error) {
 			err = c.Channel.ExchangeDeclare(
 				ex.Name,         // name
 				ex.ExchangeType, // type
-				true,            // durable
+				ex.Durable,      // durable
 				false,           // auto-deleted
 				false,           // internal
 				false,           // no-wait
@@ -118,10 +118,10 @@ func (c *messageConsumer) Configure() (err error) {
 		for _, qConfig := range c.config.Queues {
 			q, err := c.Channel.QueueDeclare(
 				qConfig.Name,           // name
-				true,                   // durable
+				qConfig.Durable,        // durable
 				qConfig.DeleteOnUnused, // delete when unused
-				true,                   // exclusive
-				false,                  // no-wait
+				qConfig.Exclusive,      // exclusive
+				qConfig.NoWait,         // no-wait
 				nil,                    // arguments
 			)
 			if err != nil {
