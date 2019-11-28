@@ -1,7 +1,7 @@
 #!/bin/bash
 
 vhost="banking"
-exchange="BankFileProcessor.Incoming"
+exchange="BankFileTransfer.Incoming"
 uuid=`uuidgen`
 currDate=`date -I`
 payload="{ 
