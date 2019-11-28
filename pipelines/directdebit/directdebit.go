@@ -1,13 +1,9 @@
 package directdebit
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"runtime"
 	"strings"
-
-	"github.com/google/uuid"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
@@ -16,7 +12,7 @@ import (
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	StartListener(chan error)
+	StartListener()
 	Execute(string) []error
 	Close() error
 	sftpGet(conf *SftpConfig) error
@@ -90,70 +86,57 @@ func New(config *PipelineConfig) (Pipeline, error) {
 	}
 
 	if config.Rabbitmq.Host != "" {
-		consumer, err := NewConsumer(&config.Rabbitmq, p.log)
-		if err != nil {
-			return nil, err
-		}
-		p.consumer = &consumer
+		p.consumer = NewConsumer(&config.Rabbitmq, p.log)
+
 	}
 
 	return p, nil
 }
 
-func (p *ddPipeline) StartListener(errCh chan error) {
+func (p *ddPipeline) StartListener() {
 
-	consumer := *p.consumer
+	p.log.Info("Start Listener ")
 
-	if err := consumer.Configure(); err != nil {
-		p.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
-	}
+	connected := make(chan bool)
+	//p.consumer.Reconnect = make(chan bool)
 
-	deliveryChannel, err := consumer.Consume()
+	// this thread is responsible for ensuring that we always have a connection
+	// to rabbitmq
+	go p.consumer.connect(connected)
+	// block until connected
+	<-connected
+
+	firehose, err := p.consumer.ConsumerChannel.Consume(
+		p.consumer.config.Queues[0].Name,
+		"pipefire",
+		true,
+		false,
+		false,
+		false, nil)
+
 	if err != nil {
-		p.log.Errorf("Unable to Consume Messages %s", err.Error())
-
-		// Send the error to the channel
-		errCh <- err
+		log.Errorf("basic.consume: %v", err)
 	}
 
-	log.Info("Consumer Registered Listening")
-
-	for d := range deliveryChannel {
-		log.Tracef("Message Body: [%s] ", d.Body)
-		log.Debugf("#goroutines: %d\n", runtime.NumGoroutine())
-		// json decode
-		payload := &TransferFilesPayload{}
-		if err := json.Unmarshal(d.Body, payload); err != nil {
-			// @todo publish message to the error queue
-			log.Error("Unable to unmarshal the message. Please ensure that the message is valid")
-			log.Errorf("Invalid Message is %s ", d.Body)
+	for {
+		if p.consumer.Reconnect {
+			p.log.Info("reset")
+			firehose, err = p.consumer.ConsumerChannel.Consume(
+				p.consumer.config.Queues[0].Name,
+				"pipefire",
+				true,
+				false,
+				false,
+				false, nil)
 		}
 
-		correlationID := payload.Message.CorrelationID
-		if correlationID == "" || correlationID == "00000000-0000-0000-0000-000000000000" {
-			// generate a unique one
-			log.Warn("invalid uuid. Generating a new one")
-			correlationID = uuid.New().String()
+		for msg := range firehose {
+			p.log.Infof("Got Message [%s]  %s ", msg.Body, msg.CorrelationId)
 		}
-
-		if len(correlationID) > 0 {
-			errs := p.Execute(correlationID)
-			if len(errs) > 0 {
-				log.Warning("Pipeline Completed With Errors")
-				for _, e := range errs {
-					log.Error(e.Error())
-				}
-			} else {
-				log.Info("Pipeline Completed Without Errors")
-			}
-		} else {
-			log.Error("Message payload did not include a correlationId, aborting. Resend Message with a correlationId")
-		}
+		p.log.Infof(" routines %d ", runtime.NumGoroutine())
 
 	}
 
-	log.Warning("Listener Stopped")
-	errCh <- errors.New("Channel went away")
 }
 
 // Execute starts the execution of the pipeline

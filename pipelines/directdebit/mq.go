@@ -1,7 +1,6 @@
 package directdebit
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -44,18 +43,19 @@ type BindingConfig struct {
 	Exchange   string
 }
 
-//MessageConsumer Consumes a message for the pipeline
-type MessageConsumer interface {
+//QueueClient Consumes a message for the pipeline
+type QueueClient interface {
 	Configure() error
-	Consume() (<-chan amqp.Delivery, error)
 	Close() error
 }
 
-type messageConsumer struct {
-	config     *BusConfig
-	Connection *amqp.Connection
-	Channel    *amqp.Channel
-	log        *log.Entry
+//MessageConsumer holds the configuration, current connection and open channel
+type MessageConsumer struct {
+	config          *BusConfig
+	Connection      *amqp.Connection
+	ConsumerChannel *amqp.Channel
+	log             *log.Entry
+	Shutdown        bool
 }
 
 //TransferFilesPayload represents the payload received from the message bus
@@ -72,67 +72,100 @@ type MessagePayload struct {
 }
 
 //NewConsumer provides an instance of MessageConsumer
-func NewConsumer(config *BusConfig, log *log.Entry) (MessageConsumer, error) {
+func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 
-	consumer := &messageConsumer{
+	consumer := &MessageConsumer{
 		log:    log.WithField("Component", "Consumer"),
 		config: config,
 	}
-
-	connString := config.ConnectionString()
-	consumer.log.Debug(connString)
-
-	conn, err := amqp.Dial(connString)
-	if err != nil {
-		consumer.log.Errorf("Failed to connect to RabbitMQ : %s ", err.Error())
-		return nil, err
-	}
-	consumer.Connection = conn
-
-	// Open a Channel
-	log.Debug("Opening Channel to RabbitMQ")
-	consumer.Channel, err = conn.Channel()
-
-	return consumer, err
+	return consumer
 }
 
-func establishConnection(uri string) *amqp.Connection {
-	for {
-		conn, err := amqp.Dial(uri)
+func (c *MessageConsumer) reconnect(status chan string) {
 
-		if err == nil {
-			return conn
-		}
+	go c.connect(status)
+	if <-status == "connected"
 
-		log.Println(err)
-		log.Printf("Trying to reconnect to RabbitMQ at %s\n", uri)
-		time.Sleep(500 * time.Millisecond)
-	}
 }
 
-func rabbitConnector(uri string) {
-	var rabbitErr *amqp.Error
-	var rabbitCloseError chan *amqp.Error
+func (c *MessageConsumer) connect(status chan string) {
+	// var rabbitErr *amqp.Error
+	rabbitCloseError := make(chan *amqp.Error)
+	channelError := make(chan *amqp.Error)
+	connectionError := make(chan bool)
 
-	for {
-		rabbitErr = <-rabbitCloseError
-		if rabbitErr != nil {
-			log.Printf("Connecting to %s\n", *amqpUri)
+	// don't try and reconnect if we have intentionally shutdown
+	if !c.Shutdown && (c.Connection == nil || c.Connection.IsClosed()) {
 
-			rabbitConn := establishConnection(uri)
-			rabbitCloseError = make(chan *amqp.Error)
-			rabbitConn.NotifyClose(rabbitCloseError)
+		go func() {
+			var err error
+			uri := c.config.ConnectionString()
+			c.log.Info("Try and connect")
 
-			// run your setup process here
-		}
+			c.Connection, err = amqp.Dial(uri)
+
+			if err != nil {
+				c.log.Error(err.Error())
+				// try again
+				connectionError <- true
+
+			} else {
+				c.log.Info("Connected")
+				c.Connection.NotifyClose(rabbitCloseError)
+
+				c.log.Debug("Creating Channel")
+				consumerCh, err := c.Connection.Channel()
+				if err != nil {
+					c.log.Errorf("Unable to create Channel : %s ", err.Error())
+				}
+
+				c.log.Debug("Configure Exchanges and Queues")
+				if err := Configure(consumerCh, c.config); err != nil {
+					c.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
+				}
+
+				c.log.Debug("Subscribe to close notifications")
+				consumerCh.NotifyClose(channelError)
+				c.ConsumerChannel = consumerCh
+
+				c.log.Debug("Setup Complete")
+				in <- true
+			}
+			// always return so we don't leak routines
+			return
+		}()
+
 	}
+
+	select {
+	case op1 := <-rabbitCloseError:
+		c.log.Warningf("Connection Closed %s", op1)
+		closed := c.Connection.IsClosed()
+		c.log.Infof("Connection Is %v", closed)
+		time.Sleep(1 * time.Second)
+		c.log.Infof("Restablishing Connection %s", op1)
+		c.reconnect(in)
+
+	case <-connectionError:
+		c.log.Info("Connection Error")
+		time.Sleep(1 * time.Second)
+		c.reconnect(in)
+
+	case <-channelError:
+		c.log.Info("Channel went away but the connection is still up ?")
+		c.reconnect(in)
+
+	}
+	// don't leak goroutines
+	return
 }
 
-func (c *messageConsumer) Configure() (err error) {
+//Configure Creates the Exchange and Queue
+func Configure(ch *amqp.Channel, config *BusConfig) (err error) {
 
-	if len(c.config.Exchanges) > 0 {
-		for _, ex := range c.config.Exchanges {
-			err = c.Channel.ExchangeDeclare(
+	if len(config.Exchanges) > 0 {
+		for _, ex := range config.Exchanges {
+			err = ch.ExchangeDeclare(
 				ex.Name,         // name
 				ex.ExchangeType, // type
 				ex.Durable,      // durable
@@ -147,9 +180,9 @@ func (c *messageConsumer) Configure() (err error) {
 		}
 	}
 
-	if len(c.config.Queues) > 0 {
-		for _, qConfig := range c.config.Queues {
-			q, err := c.Channel.QueueDeclare(
+	if len(config.Queues) > 0 {
+		for _, qConfig := range config.Queues {
+			q, err := ch.QueueDeclare(
 				qConfig.Name,           // name
 				qConfig.Durable,        // durable
 				qConfig.DeleteOnUnused, // delete when unused
@@ -163,7 +196,7 @@ func (c *messageConsumer) Configure() (err error) {
 
 			if len(qConfig.Bindings) > 0 {
 				for _, bindingConfig := range qConfig.Bindings {
-					err := c.Channel.QueueBind(
+					err := ch.QueueBind(
 						q.Name,                   // queue name
 						bindingConfig.RoutingKey, // routing key
 						bindingConfig.Exchange,   // exchange
@@ -177,28 +210,12 @@ func (c *messageConsumer) Configure() (err error) {
 			}
 		}
 	}
+
 	return
 }
 
-func (c *messageConsumer) Consume() (<-chan amqp.Delivery, error) {
-	if c.Channel != nil {
-		c.log.Debug("Registering Consumer")
-
-		// @Todo this should return slices
-		return c.Channel.Consume(
-			c.config.Queues[0].Name, // queue
-			"pipefire",              // consumer
-			true,                    // auto-ack
-			false,                   // exclusive
-			false,                   // no-local
-			false,                   // no-wait
-			nil,                     // args
-		)
-	}
-	return nil, errors.New("can't register consumer, channel is not open")
-}
-
-func (c *messageConsumer) Close() error {
+// Close Closes the connection to the rabbitmq server
+func (c *MessageConsumer) Close() error {
 
 	err := c.Connection.Close()
 
