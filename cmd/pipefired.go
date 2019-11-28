@@ -68,17 +68,8 @@ func executePipelines() {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-	defer directDebitPipeline.Close()
 
-	// @todo load and execute pipelines concurrently
-	// execute pipeline
-	errCh := make(chan error)
-
-	go directDebitPipeline.StartListener(errCh)
-	x := <-errCh
-
-	log.Errorf("Critical Error %s ", x.Error())
-	//directDebitPipeline.Close()
+	go directDebitPipeline.StartListener()
 
 }
 
