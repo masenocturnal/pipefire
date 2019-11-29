@@ -55,7 +55,7 @@
                         "bindings": [
                             {
                                 "routingKey": "",
-                                "exchange": "BankFileProcessor.Incoming_error"
+                                "exchange": "BankFileTransfer.Incoming"
 
                             }
                         ]

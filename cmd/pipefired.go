@@ -69,7 +69,12 @@ func executePipelines() {
 		os.Exit(1)
 	}
 
-	go directDebitPipeline.StartListener()
+	for {
+		listenerError := make(chan error)
+		go directDebitPipeline.StartListener(listenerError)
+		<-listenerError
+		log.Info("Next")
+	}
 
 }
 

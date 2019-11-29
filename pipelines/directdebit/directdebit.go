@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
@@ -12,7 +13,7 @@ import (
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	StartListener()
+	StartListener(listenerError chan error)
 	Execute(string) []error
 	Close() error
 	sftpGet(conf *SftpConfig) error
@@ -57,6 +58,14 @@ func New(config *PipelineConfig) (Pipeline, error) {
 		log:        log.WithField("Pipeline", "DirectDebit"),
 	}
 
+	go func() {
+		for {
+			p.log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+			time.Sleep(4 * time.Second)
+		}
+
+	}()
+
 	if config.Database.Addr != "" {
 		dbConfig := config.Database
 		dbConfig.ParseTime = true
@@ -86,6 +95,7 @@ func New(config *PipelineConfig) (Pipeline, error) {
 	}
 
 	if config.Rabbitmq.Host != "" {
+
 		p.consumer = NewConsumer(&config.Rabbitmq, p.log)
 
 	}
@@ -93,50 +103,76 @@ func New(config *PipelineConfig) (Pipeline, error) {
 	return p, nil
 }
 
-func (p *ddPipeline) StartListener() {
+func (p *ddPipeline) StartListener(listenerError chan error) {
 
-	p.log.Info("Start Listener ")
+	if err := p.consumer.Connect(); err != nil {
+		
+	}
 
-	connected := make(chan bool)
-	//p.consumer.Reconnect = make(chan bool)
+	select {
+
+		listenerError <- fmt.Errorf("rar")
+	}
+	
+
+	p.log.Info("Exit")
+	// busError := make(chan *BusError)
+	//channelError := make(chan *amqp.Error)
 
 	// this thread is responsible for ensuring that we always have a connection
 	// to rabbitmq
-	go p.consumer.connect(connected)
-	// block until connected
-	<-connected
 
-	firehose, err := p.consumer.ConsumerChannel.Consume(
-		p.consumer.config.Queues[0].Name,
-		"pipefire",
-		true,
-		false,
-		false,
-		false, nil)
+	// c.log.Info("Connected")
+	// c.Connection.NotifyClose(rabbitCloseError)
 
-	if err != nil {
-		log.Errorf("basic.consume: %v", err)
-	}
+	// c.log.Debug("Creating Channel")
+	// consumerCh, err := c.Connection.Channel()
+	// if err != nil {
+	// 	c.log.Errorf("Unable to create Channel : %s ", err.Error())
+	// }
 
-	for {
-		if p.consumer.Reconnect {
-			p.log.Info("reset")
-			firehose, err = p.consumer.ConsumerChannel.Consume(
-				p.consumer.config.Queues[0].Name,
-				"pipefire",
-				true,
-				false,
-				false,
-				false, nil)
-		}
+	// c.log.Debug("Configure Exchanges and Queues")
+	// if err := Configure(consumerCh, c.config); err != nil {
+	// 	c.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
+	// }
+	// c.ConsumerChannel = consumerCh
+	// c.log.Debug("Setup Complete")
 
-		for msg := range firehose {
-			p.log.Infof("Got Message [%s]  %s ", msg.Body, msg.CorrelationId)
-		}
-		p.log.Infof(" routines %d ", runtime.NumGoroutine())
+	// p.log.Info("Start Listener ")
 
-	}
+	// firehose, err := p.consumer.ConsumerChannel.Consume(
+	// 	p.consumer.config.Queues[0].Name,
+	// 	"pipefire",
+	// 	true,
+	// 	false,
+	// 	false,
+	// 	false, nil)
 
+	// if err != nil {
+	// 	log.Errorf("basic.consume: %v", err)
+	// }
+	// p.log.Debug("Subscribe to close notifications")
+	// p.consumer.ConsumerChannel.NotifyClose(channelError)
+
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case <-channelError:
+	// 			p.log.Warning("Connection to server has been reset ")
+	// 			return
+	// 		default:
+	// 			for msg := range firehose {
+	// 				p.log.Infof("Got Message [%s]  %s ", msg.Body, msg.CorrelationId)
+	// 			}
+	// 		}
+	// 	}
+	// }()
+
+	// <-channelError
+
+	// p.log.Infof("Connection Status %s ")
+
+	return
 }
 
 // Execute starts the execution of the pipeline

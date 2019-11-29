@@ -2,7 +2,6 @@ package directdebit
 
 import (
 	"fmt"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -45,6 +44,7 @@ type BindingConfig struct {
 
 //QueueClient Consumes a message for the pipeline
 type QueueClient interface {
+	Connect(chan string)
 	Configure() error
 	Close() error
 }
@@ -71,6 +71,12 @@ type MessagePayload struct {
 	CorrelationID string
 }
 
+//BusError indicates there is a connection issue with the bus and an action to take
+type BusError struct {
+	Msg    string
+	Action string
+}
+
 //NewConsumer provides an instance of MessageConsumer
 func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 
@@ -81,83 +87,21 @@ func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 	return consumer
 }
 
-func (c *MessageConsumer) reconnect(status chan string) {
+//Connect Establishes a connection to rabbitmq
+func (c *MessageConsumer) Connect() error {
 
-	go c.connect(status)
-	if <-status == "connected"
+	// rabbitCloseError := make(chan *amqp.Error)
 
-}
+	var err error
+	uri := c.config.ConnectionString()
+	c.log.Info("Try and connect")
 
-func (c *MessageConsumer) connect(status chan string) {
-	// var rabbitErr *amqp.Error
-	rabbitCloseError := make(chan *amqp.Error)
-	channelError := make(chan *amqp.Error)
-	connectionError := make(chan bool)
-
-	// don't try and reconnect if we have intentionally shutdown
-	if !c.Shutdown && (c.Connection == nil || c.Connection.IsClosed()) {
-
-		go func() {
-			var err error
-			uri := c.config.ConnectionString()
-			c.log.Info("Try and connect")
-
-			c.Connection, err = amqp.Dial(uri)
-
-			if err != nil {
-				c.log.Error(err.Error())
-				// try again
-				connectionError <- true
-
-			} else {
-				c.log.Info("Connected")
-				c.Connection.NotifyClose(rabbitCloseError)
-
-				c.log.Debug("Creating Channel")
-				consumerCh, err := c.Connection.Channel()
-				if err != nil {
-					c.log.Errorf("Unable to create Channel : %s ", err.Error())
-				}
-
-				c.log.Debug("Configure Exchanges and Queues")
-				if err := Configure(consumerCh, c.config); err != nil {
-					c.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
-				}
-
-				c.log.Debug("Subscribe to close notifications")
-				consumerCh.NotifyClose(channelError)
-				c.ConsumerChannel = consumerCh
-
-				c.log.Debug("Setup Complete")
-				in <- true
-			}
-			// always return so we don't leak routines
-			return
-		}()
-
+	c.Connection, err = amqp.Dial(uri)
+	if err != nil {
+		return err
 	}
 
-	select {
-	case op1 := <-rabbitCloseError:
-		c.log.Warningf("Connection Closed %s", op1)
-		closed := c.Connection.IsClosed()
-		c.log.Infof("Connection Is %v", closed)
-		time.Sleep(1 * time.Second)
-		c.log.Infof("Restablishing Connection %s", op1)
-		c.reconnect(in)
-
-	case <-connectionError:
-		c.log.Info("Connection Error")
-		time.Sleep(1 * time.Second)
-		c.reconnect(in)
-
-	case <-channelError:
-		c.log.Info("Channel went away but the connection is still up ?")
-		c.reconnect(in)
-
-	}
-	// don't leak goroutines
-	return
+	return err
 }
 
 //Configure Creates the Exchange and Queue
