@@ -44,7 +44,7 @@ type BindingConfig struct {
 
 //QueueClient Consumes a message for the pipeline
 type QueueClient interface {
-	Connect(chan string)
+	Connect()
 	Configure() error
 	Close() error
 }
@@ -88,24 +88,24 @@ func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 }
 
 //Connect Establishes a connection to rabbitmq
-func (c *MessageConsumer) Connect() error {
-
-	// rabbitCloseError := make(chan *amqp.Error)
+func (c *MessageConsumer) Connect() (*amqp.Connection, error) {
 
 	var err error
 	uri := c.config.ConnectionString()
-	c.log.Info("Try and connect")
-
-	c.Connection, err = amqp.Dial(uri)
+	c.log.Info("Try and connect to RabbitMQ")
+	conn, err := amqp.Dial(uri)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return err
+	c.log.Info("Connected")
+	return conn, err
 }
 
 //Configure Creates the Exchange and Queue
-func Configure(ch *amqp.Channel, config *BusConfig) (err error) {
+func (c *MessageConsumer) Configure(ch *amqp.Channel) (err error) {
+
+	config := c.config
 
 	if len(config.Exchanges) > 0 {
 		for _, ex := range config.Exchanges {

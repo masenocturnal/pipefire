@@ -2,13 +2,12 @@ package directdebit
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
-	"time"
 
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 )
 
 // Pipeline is an implementation of a pipeline
@@ -58,14 +57,6 @@ func New(config *PipelineConfig) (Pipeline, error) {
 		log:        log.WithField("Pipeline", "DirectDebit"),
 	}
 
-	go func() {
-		for {
-			p.log.Debugf("No of goroutines %d", runtime.NumGoroutine())
-			time.Sleep(4 * time.Second)
-		}
-
-	}()
-
 	if config.Database.Addr != "" {
 		dbConfig := config.Database
 		dbConfig.ParseTime = true
@@ -105,74 +96,83 @@ func New(config *PipelineConfig) (Pipeline, error) {
 
 func (p *ddPipeline) StartListener(listenerError chan error) {
 
-	if err := p.consumer.Connect(); err != nil {
-		
+	conn, err := p.consumer.Connect()
+	if err != nil {
+		listenerError <- err
+		// goroutine will block forever if we don't return
+		return
 	}
 
-	select {
-
-		listenerError <- fmt.Errorf("rar")
+	if conn == nil || conn.IsClosed() {
+		listenerError <- fmt.Errorf("RabbitMQ Connection is in an unexpected state")
+		// goroutine will block forever if we don't return
+		return
 	}
-	
 
-	p.log.Info("Exit")
-	// busError := make(chan *BusError)
-	//channelError := make(chan *amqp.Error)
+	// we want to know if the connection get's closed
+	rabbitCloseError := conn.NotifyClose(make(chan *amqp.Error))
 
-	// this thread is responsible for ensuring that we always have a connection
-	// to rabbitmq
+	p.log.Debug("Creating Channel")
+	consumerCh, err := conn.Channel()
+	if err != nil {
+		p.log.Errorf("Unable to create Channel : %s ", err.Error())
+		listenerError <- err
+		// goroutine will block forever if we don't return
+		return
+	}
 
-	// c.log.Info("Connected")
-	// c.Connection.NotifyClose(rabbitCloseError)
+	// @todo Configure Channel
+	if err := p.consumer.Configure(consumerCh); err != nil {
+		listenerError <- err
+		return
+	}
 
-	// c.log.Debug("Creating Channel")
-	// consumerCh, err := c.Connection.Channel()
-	// if err != nil {
-	// 	c.log.Errorf("Unable to create Channel : %s ", err.Error())
-	// }
+	channelError := consumerCh.NotifyClose(make(chan *amqp.Error))
 
-	// c.log.Debug("Configure Exchanges and Queues")
-	// if err := Configure(consumerCh, c.config); err != nil {
-	// 	c.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
-	// }
-	// c.ConsumerChannel = consumerCh
-	// c.log.Debug("Setup Complete")
+	p.log.Debug("Consuming")
+	firehose, err := consumerCh.Consume(
+		p.consumer.config.Queues[0].Name,
+		"pipefire",
+		true,
+		false,
+		false,
+		false,
+		nil)
 
-	// p.log.Info("Start Listener ")
+	if err != nil {
+		listenerError <- err
+		// goroutine will block forever if we don't return
+		return
+	}
 
-	// firehose, err := p.consumer.ConsumerChannel.Consume(
-	// 	p.consumer.config.Queues[0].Name,
-	// 	"pipefire",
-	// 	true,
-	// 	false,
-	// 	false,
-	// 	false, nil)
+	for {
+		select {
+		case err := <-rabbitCloseError:
+			if conn != nil && !conn.IsClosed() {
+				// can't imagine how it wwuld get to here
+				// but handle it to be safe
+				_ = conn.Close()
+			}
+			p.log.Warning("RabbitMQ Connection has gone away")
 
-	// if err != nil {
-	// 	log.Errorf("basic.consume: %v", err)
-	// }
-	// p.log.Debug("Subscribe to close notifications")
-	// p.consumer.ConsumerChannel.NotifyClose(channelError)
+			// foo <- true
+			p.log.Warning("Routine Cancelled")
+			listenerError <- err
+			p.log.Warning("Shutting down 1")
 
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case <-channelError:
-	// 			p.log.Warning("Connection to server has been reset ")
-	// 			return
-	// 		default:
-	// 			for msg := range firehose {
-	// 				p.log.Infof("Got Message [%s]  %s ", msg.Body, msg.CorrelationId)
-	// 			}
-	// 		}
-	// 	}
-	// }()
+			p.log.Warning("Done")
+			return
+		case err := <-channelError:
+			// foo <- true
+			p.log.Warning("Shutting down 2")
+			listenerError <- err
 
-	// <-channelError
-
-	// p.log.Infof("Connection Status %s ")
-
-	return
+			p.log.Warning("Done")
+			return
+		case msg := <-firehose:
+			p.log.Infof("Firehost [%s]", msg.Body)
+		}
+	}
 }
 
 // Execute starts the execution of the pipeline
