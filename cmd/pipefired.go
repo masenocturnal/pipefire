@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
@@ -71,9 +73,15 @@ func executePipelines() {
 
 	for {
 		listenerError := make(chan error)
+
 		go directDebitPipeline.StartListener(listenerError)
-		<-listenerError
-		log.Info("Next")
+		err := <-listenerError
+
+		log.Warningf("RabbitMQ Reconnect Required: %s", err)
+		log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+
+		time.Sleep(2 * time.Second)
+
 	}
 
 }
