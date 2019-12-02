@@ -72,13 +72,14 @@ func executePipelines() {
 	}
 
 	for {
+
+		log.Tracef("No of goroutines %d", runtime.NumGoroutine())
 		listenerError := make(chan error)
 
 		go directDebitPipeline.StartListener(listenerError)
 		err := <-listenerError
 
 		log.Warningf("RabbitMQ Reconnect Required: %s", err)
-		log.Debugf("No of goroutines %d", runtime.NumGoroutine())
 
 		time.Sleep(2 * time.Second)
 
