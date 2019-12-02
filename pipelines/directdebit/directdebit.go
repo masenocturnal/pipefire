@@ -138,7 +138,7 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 	firehose, err := consumerCh.Consume(
 		p.consumer.config.Queues[0].Name,
 		"pipefire",
-		true,
+		false,
 		false,
 		false,
 		false,
@@ -182,6 +182,7 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				// @todo move to error queue
 				p.log.Errorf("Unable to unmarshall payload")
 				msg.Reject(false)
+				break
 			}
 
 			// de-serialise
@@ -190,7 +191,7 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				// this is useless so make a random one and log it
 				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.Message.CorrelationID)
 				// @todo move to error queue
-				msg.Reject(false)
+
 			}
 
 			errList := p.Execute(payload.Message.CorrelationID)
