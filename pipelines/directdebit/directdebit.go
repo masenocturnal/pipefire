@@ -127,12 +127,14 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 		return
 	}
 
+	p.log.Debug("Creating Exchanges and Queues")
 	// Setup the Exchanges and the Queues
 	if err := p.consumer.Configure(consumerCh); err != nil {
 		listenerError <- err
 		return
 	}
 
+	p.log.Info("Opening Consumer Channel")
 	firehose, err := consumerCh.Consume(
 		p.consumer.config.Queues[0].Name,
 		"pipefire",
@@ -157,6 +159,7 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				// but handle it to be safe
 				_ = conn.Close()
 			}
+			_ = consumerCh.Cancel("pipefire", false)
 			p.log.Warning("RabbitMQ Connection has gone away")
 			listenerError <- err
 
@@ -166,34 +169,41 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 			p.log.Tracef("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
 
 			if msg.Body == nil || len(msg.Body) < 2 {
-				p.log.Errorf("Message Payload of [%s] is too small or doesn't exist", msg.Body)
+				break
+				// p.log.Errorf("Message Payload of [%s] is too small or doesn't exist", msg.Body)
+				//msg.Reject(false)
 				// @todo move to error queue
 			}
 
-			payload := &MessagePayload{}
+			payload := &TransferFilesPayload{}
 
 			err := json.Unmarshal(msg.Body, payload)
 			if err != nil {
 				// @todo move to error queue
 				p.log.Errorf("Unable to unmarshall payload")
+				msg.Reject(false)
 			}
 
 			// de-serialise
-			if payload != nil && payload.CorrelationID == "00000000-0000-0000-0000-000000000000" {
-				payload.CorrelationID = uuid.New().String()
+			if payload != nil && payload.Message.CorrelationID == "00000000-0000-0000-0000-000000000000" {
+				payload.Message.CorrelationID = uuid.New().String()
 				// this is useless so make a random one and log it
-				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.CorrelationID)
+				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.Message.CorrelationID)
 				// @todo move to error queue
+				msg.Reject(false)
 			}
 
-			errList := p.Execute(payload.CorrelationID)
+			errList := p.Execute(payload.Message.CorrelationID)
 			if len(errList) > 0 {
 				p.log.Info("Direct Debit Run Finished With Errors")
 				for _, e := range errList {
 					p.log.Errorf("%s ", e.Error())
 				}
+				// don't requeue at this stage
+				msg.Nack(false, false)
 			} else {
 				p.log.Info("Direct Debit Run Completed Successfully")
+				msg.Ack(true)
 			}
 
 		}

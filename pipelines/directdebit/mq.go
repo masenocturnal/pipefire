@@ -66,9 +66,9 @@ type TransferFilesPayload struct {
 
 //MessagePayload represents the message content in a TransferFilesPayload from the message bus
 type MessagePayload struct {
-	Task          string
+	Task          string `json:"task"`
 	StartDate     string `json:"start_date"`
-	CorrelationID string
+	CorrelationID string `json:"correlationId"`
 }
 
 //BusError indicates there is a connection issue with the bus and an action to take
