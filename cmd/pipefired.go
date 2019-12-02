@@ -80,11 +80,8 @@ func executePipelines() {
 		err := <-listenerError
 
 		log.Warningf("RabbitMQ Reconnect Required: %s", err)
-
 		time.Sleep(2 * time.Second)
-
 	}
-
 }
 
 func initLogging(lvl string) {

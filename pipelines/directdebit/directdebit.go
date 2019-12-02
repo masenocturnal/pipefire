@@ -1,10 +1,12 @@
 package directdebit
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	mysql "github.com/go-sql-driver/mysql"
+	"github.com/google/uuid"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -110,26 +112,27 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 	}
 
 	// we want to know if the connection get's closed
-	rabbitCloseError := conn.NotifyClose(make(chan *amqp.Error))
+
+	rabbitCloseError := make(chan *amqp.Error)
+	conn.NotifyClose(rabbitCloseError)
 
 	p.log.Debug("Creating Channel")
 	consumerCh, err := conn.Channel()
 	if err != nil {
 		p.log.Errorf("Unable to create Channel : %s ", err.Error())
 		listenerError <- err
+		close(rabbitCloseError)
+
 		// goroutine will block forever if we don't return
 		return
 	}
 
-	// @todo Configure Channel
+	// Setup the Exchanges and the Queues
 	if err := p.consumer.Configure(consumerCh); err != nil {
 		listenerError <- err
 		return
 	}
 
-	channelError := consumerCh.NotifyClose(make(chan *amqp.Error))
-
-	p.log.Debug("Consuming")
 	firehose, err := consumerCh.Consume(
 		p.consumer.config.Queues[0].Name,
 		"pipefire",
@@ -140,8 +143,9 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 		nil)
 
 	if err != nil {
-		listenerError <- err
+		// channelError <- err
 		// goroutine will block forever if we don't return
+		listenerError <- err
 		return
 	}
 
@@ -154,23 +158,44 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				_ = conn.Close()
 			}
 			p.log.Warning("RabbitMQ Connection has gone away")
-
-			// foo <- true
-			p.log.Warning("Routine Cancelled")
-			listenerError <- err
-			p.log.Warning("Shutting down 1")
-
-			p.log.Warning("Done")
-			return
-		case err := <-channelError:
-			// foo <- true
-			p.log.Warning("Shutting down 2")
 			listenerError <- err
 
-			p.log.Warning("Done")
+			p.log.Info("Shutting Down Listener")
 			return
 		case msg := <-firehose:
-			p.log.Infof("Firehost [%s]", msg.Body)
+			p.log.Tracef("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
+
+			if msg.Body == nil || len(msg.Body) < 2 {
+				p.log.Errorf("Message Payload of [%s] is too small or doesn't exist", msg.Body)
+				// @todo move to error queue
+			}
+
+			payload := &MessagePayload{}
+
+			err := json.Unmarshal(msg.Body, payload)
+			if err != nil {
+				// @todo move to error queue
+				p.log.Errorf("Unable to unmarshall payload")
+			}
+
+			// de-serialise
+			if payload != nil && payload.CorrelationID == "00000000-0000-0000-0000-000000000000" {
+				payload.CorrelationID = uuid.New().String()
+				// this is useless so make a random one and log it
+				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.CorrelationID)
+				// @todo move to error queue
+			}
+
+			errList := p.Execute(payload.CorrelationID)
+			if len(errList) > 0 {
+				p.log.Info("Direct Debit Run Finished With Errors")
+				for _, e := range errList {
+					p.log.Errorf("%s ", e.Error())
+				}
+			} else {
+				p.log.Info("Direct Debit Run Completed Successfully")
+			}
+
 		}
 	}
 }
