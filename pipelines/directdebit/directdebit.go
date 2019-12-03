@@ -49,6 +49,7 @@ type ddPipeline struct {
 	correlationID string
 	consumer      *MessageConsumer
 	transferlog   *TransferLog
+	encryptionLog *EncryptionLog
 	taskConfig    *PipelineConfig
 }
 
@@ -85,7 +86,8 @@ func New(config *PipelineConfig) (Pipeline, error) {
 		db.SetLogger(p.log)
 		db.LogMode(true)
 
-		p.transferlog = NewRecorder(db, p.log)
+		p.transferlog = NewTransferRecorder(db, p.log)
+		p.transferlog = NewEncryptionRecorder(db, p.log)
 	}
 
 	if config.Rabbitmq.Host != "" {

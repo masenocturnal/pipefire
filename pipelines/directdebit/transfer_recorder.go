@@ -10,18 +10,18 @@ import (
 
 // TransferRecorder provides a mechanism to update the transfer status
 type TransferRecorder interface {
-	Create(txn *gorm.DB, rec *Record) error
+	Create(txn *gorm.DB, rec *TransferRecord) error
 	FileAlreadySent(txn *gorm.DB, localFileHash string, remoteHost string) (bool, error)
 	// Close() error
 }
 
 //TableName sets the table name to TransferRecord
-func (Record) TableName() string {
+func (TransferRecord) TableName() string {
 	return "TransferRecord"
 }
 
-//Record Maps to a row in the FileTransfers table
-type Record struct {
+//TransferRecord Maps to a row in the FileTransfers table
+type TransferRecord struct {
 	gorm.Model
 	LocalFileName       string
 	LocalFilePath       string
@@ -47,8 +47,8 @@ type TransferLog struct {
 	log  *log.Entry
 }
 
-// NewRecorder provides a service which records transfer records in the database
-func NewRecorder(Conn *gorm.DB, log *log.Entry) *TransferLog {
+// NewTransferRecorder provides a service which records transfer records in the database
+func NewTransferRecorder(Conn *gorm.DB, log *log.Entry) *TransferLog {
 
 	transferLog := &TransferLog{
 		Conn: Conn,
@@ -59,7 +59,7 @@ func NewRecorder(Conn *gorm.DB, log *log.Entry) *TransferLog {
 }
 
 //Create  Creates a TransferRecord
-func (t TransferLog) Create(txn *gorm.DB, rec *Record) error {
+func (t TransferLog) Create(txn *gorm.DB, rec *TransferRecord) error {
 	if txn == nil {
 		return fmt.Errorf("Create must be performed in a transaction")
 	}
@@ -70,19 +70,31 @@ func (t TransferLog) Create(txn *gorm.DB, rec *Record) error {
 	return nil
 }
 
-//GetRecordByHash Returns a record by hash
-func (t TransferLog) GetRecordByHash(hash string) {
+//RecordError Updates the transfer record in the database to record the error message
+func (t TransferLog) RecordError(txn *gorm.DB, rec *TransferRecord) error {
 
-}
+	sql := "local_file_hash = ? and remote_host = ? and correlation_id = ?"
 
-//GetRecordByFileName Returns a record based on the file name
-func (t TransferLog) GetRecordByFileName(fileName string) {
+	result := txn.
+		Model(rec).
+		Where(sql, rec.LocalFileHash, rec.RemoteHost, rec.CorrelationID).
+		UpdateColumns(TransferRecord{
+			TransferEnd:    rec.TransferEnd,
+			TransferErrors: rec.TransferErrors,
+		})
+	if err := result.Error; err != nil {
 
+		t.log.Error(err.Error())
+		return err
+	}
+	t.log.Debugf("Rows Updated %d ", result.RowsAffected)
+
+	return nil
 }
 
 //FileAlreadySent Determines if a file has been
 func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost string) (bool, error) {
-	var rec Record
+	var rec TransferRecord
 	var myCount []int = make([]int, 1)
 	sql := fmt.Sprintf(`SELECT count(id) as noRecords
 		FROM %s
@@ -105,36 +117,14 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 	return false, err
 }
 
-//RecordError Updates the transfer record in the database to record the error message
-func (t TransferLog) RecordError(txn *gorm.DB, rec *Record) error {
-
-	sql := "local_file_hash = ? and remote_host = ? and correlation_id = ?"
-
-	result := txn.
-		Model(rec).
-		Where(sql, rec.LocalFileHash, rec.RemoteHost, rec.CorrelationID).
-		UpdateColumns(Record{
-			TransferEnd:    rec.TransferEnd,
-			TransferErrors: rec.TransferErrors,
-		})
-	if err := result.Error; err != nil {
-
-		t.log.Error(err.Error())
-		return err
-	}
-	t.log.Debugf("Rows Updated %d ", result.RowsAffected)
-
-	return nil
-}
-
 // Update updates the record
-func (t TransferLog) Update(txn *gorm.DB, rec *Record) error {
+func (t TransferLog) Update(txn *gorm.DB, rec *TransferRecord) error {
 
 	sql := "local_file_hash = ? AND remote_host = ? AND correlation_id = ?"
 	result := txn.
 		Model(rec).
 		Where(sql, rec.LocalFileHash, rec.RemoteHost, rec.CorrelationID).
-		UpdateColumns(Record{
+		UpdateColumns(TransferRecord{
 			RemoteFileName:      rec.RemoteFileName,
 			RemoteFilePath:      rec.RemoteFilePath,
 			RemoteFileSize:      rec.RemoteFileSize,

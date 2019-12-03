@@ -129,6 +129,9 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 		for _, fileToEncrypt := range fileList {
 			f := filepath.Join(srcDir, fileToEncrypt.Name())
 			o := filepath.Join(outputDir, fileToEncrypt.Name())
+			// hash file
+			// record file
+			// encrypt file
 			err = cryptoProvider.EncryptFile(f, o+".gpg")
 			if err != nil {
 				p.log.Warningf("Error encrypting file %s : %s", f, err.Error())

@@ -163,7 +163,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 			// attempt to transfer
 			confirmation, err := sftp.SendFile(cur, conf.RemoteDir)
 			if err != nil {
-				rec := &Record{
+				rec := &TransferRecord{
 					RemoteHost: conf.Sftp.Host,
 					// @todo see if this is populated TransferredFileHash: confirmation.TransferredHash,
 					TransferStart:  startTime,
@@ -181,7 +181,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 
 			if confirmation != nil {
 
-				rec := &Record{
+				rec := &TransferRecord{
 					RemoteFileName:      confirmation.RemoteFileName,
 					RemoteFilePath:      confirmation.RemotePath,
 					RemoteFileSize:      confirmation.RemoteSize,
@@ -250,7 +250,7 @@ func (p *ddPipeline) recordFilesToSend(localDir string, remoteHost string) error
 		}
 
 		// add the record to the transferlog
-		record := &Record{
+		record := &TransferRecord{
 			LocalFileSize: file.Size(),
 			LocalFileName: file.Name(),
 			LocalFilePath: cur,
