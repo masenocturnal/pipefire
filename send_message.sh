@@ -1,11 +1,7 @@
 #!/bin/bash
 
 vhost="banking"
-<<<<<<< HEAD
-exchange="BankFileProcessor.Incoming"
-=======
 exchange="BankFileTransfer.Incoming"
->>>>>>> Merge RabbitMQ support
 uuid=`uuidgen`
 currDate=`date -I`
 payload="{ 
