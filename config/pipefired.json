@@ -6,7 +6,7 @@
             "database": {
                 "user": "root",
                 "net": "tcp",
-                "addr": "localhost:3306",
+                "addr": "172.20.1.2:3306",
                 "passwd": "foobar123",
                 "dbname": "pipefire",
                 "allowNativePasswords": true
@@ -31,31 +31,31 @@
                 ],
                 "queues": [
                     {
-                        "name": "BankFileProcessor.Incoming",
+                        "name": "BankFileTransfer.Incoming",
                         "durable": true,
-                        "deleteOnUnused": true,
-                        "exclusive": true,
+                        "deleteOnUnused": false,
+                        "exclusive": false,
                         "noWait": true,
                         "args": "",
                         "bindings": [
                             {
                                 "routingKey": "",
-                                "exchange": "BankFileProcessor.Incoming"
+                                "exchange": "BankFileTransfer.Incoming"
 
                             }
                         ]
                     },
                     {
-                        "name": "BankFileProcessor.Incoming_error",
+                        "name": "BankFileTransfer.Incoming_error",
                         "durable": true,
-                        "deleteOnUnused": true,
-                        "exclusive": true,
+                        "deleteOnUnused": false,
+                        "exclusive": false,
                         "noWait": true,
                         "args": "",
                         "bindings": [
                             {
                                 "routingKey": "",
-                                "exchange": "BankFileProcessor.Incoming_error"
+                                "exchange": "BankFileTransfer.Incoming"
 
                             }
                         ]

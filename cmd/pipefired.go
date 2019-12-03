@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
@@ -14,7 +16,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.10"
+const version string = "0.9.11"
 
 func main() {
 
@@ -68,18 +70,18 @@ func executePipelines() {
 		log.Error(err.Error())
 		os.Exit(1)
 	}
-	defer directDebitPipeline.Close()
 
-	// @todo load and execute pipelines concurrently
-	// execute pipeline
-	errCh := make(chan error)
+	for {
 
-	go directDebitPipeline.StartListener(errCh)
-	x := <-errCh
+		log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+		listenerError := make(chan error)
 
-	log.Errorf("Critical Error %s ", x.Error())
-	//directDebitPipeline.Close()
+		go directDebitPipeline.StartListener(listenerError)
+		err := <-listenerError
 
+		log.Warningf("RabbitMQ Reconnect Required: %s", err)
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func initLogging(lvl string) {
@@ -91,6 +93,9 @@ func initLogging(lvl string) {
 	lvl = strings.ToLower(lvl)
 
 	switch lvl {
+	case "trace":
+		log.SetLevel(log.TraceLevel)
+		break
 	case "debug":
 		log.SetLevel(log.DebugLevel)
 		break

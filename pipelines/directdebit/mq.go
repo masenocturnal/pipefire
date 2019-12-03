@@ -1,7 +1,6 @@
 package directdebit
 
 import (
-	"errors"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
@@ -15,8 +14,8 @@ type BusConfig struct {
 	Host      string
 	Port      string
 	Vhost     string
-	Exchanges []ExchangeConfig
-	Queues    []QueueConfig
+	Exchanges []*ExchangeConfig
+	Queues    []*QueueConfig `json:"queues"`
 }
 
 //ExchangeConfig RabbbitMQ Exchange configuration
@@ -29,11 +28,11 @@ type ExchangeConfig struct {
 //QueueConfig RabbitMQ Queue definition
 type QueueConfig struct {
 	Name           string
-	Durable        bool
-	DeleteOnUnused bool
-	Exclusive      bool
-	NoWait         bool
-	Args           string
+	Durable        bool            `json:"durable"`
+	DeleteOnUnused bool            `json:"deleteOnUnused"`
+	Exclusive      bool            `json:"exclusive"`
+	NoWait         bool            `json:"noWait"`
+	Args           string          `json:"args"`
 	Bindings       []BindingConfig `json:"bindings"`
 }
 
@@ -43,18 +42,20 @@ type BindingConfig struct {
 	Exchange   string
 }
 
-//MessageConsumer Consumes a message for the pipeline
-type MessageConsumer interface {
+//QueueClient Consumes a message for the pipeline
+type QueueClient interface {
+	Connect()
 	Configure() error
-	Consume() (<-chan amqp.Delivery, error)
 	Close() error
 }
 
-type messageConsumer struct {
-	config     *BusConfig
-	Connection *amqp.Connection
-	Channel    *amqp.Channel
-	log        *log.Entry
+//MessageConsumer holds the configuration, current connection and open channel
+type MessageConsumer struct {
+	config          *BusConfig
+	Connection      *amqp.Connection
+	ConsumerChannel *amqp.Channel
+	log             *log.Entry
+	Shutdown        bool
 }
 
 //TransferFilesPayload represents the payload received from the message bus
@@ -65,44 +66,53 @@ type TransferFilesPayload struct {
 
 //MessagePayload represents the message content in a TransferFilesPayload from the message bus
 type MessagePayload struct {
-	Task          string
+	Task          string `json:"task"`
 	StartDate     string `json:"start_date"`
-	CorrelationID string
+	CorrelationID string `json:"correlationId"`
+}
+
+//BusError indicates there is a connection issue with the bus and an action to take
+type BusError struct {
+	Msg    string
+	Action string
 }
 
 //NewConsumer provides an instance of MessageConsumer
-func NewConsumer(config *BusConfig, log *log.Entry) (MessageConsumer, error) {
+func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 
-	consumer := &messageConsumer{
+	consumer := &MessageConsumer{
 		log:    log.WithField("Component", "Consumer"),
 		config: config,
 	}
-
-	connString := config.ConnectionString()
-	consumer.log.Debug(connString)
-
-	conn, err := amqp.Dial(connString)
-	if err != nil {
-		consumer.log.Errorf("Failed to connect to RabbitMQ : %s ", err.Error())
-		return nil, err
-	}
-	consumer.Connection = conn
-
-	// Open a Channel
-	log.Debug("Opening Channel to RabbitMQ")
-	consumer.Channel, err = conn.Channel()
-
-	return consumer, err
+	return consumer
 }
 
-func (c *messageConsumer) Configure() (err error) {
+//Connect Establishes a connection to rabbitmq
+func (c *MessageConsumer) Connect() (*amqp.Connection, error) {
 
-	if len(c.config.Exchanges) > 0 {
-		for _, ex := range c.config.Exchanges {
-			err = c.Channel.ExchangeDeclare(
+	var err error
+	uri := c.config.ConnectionString()
+	c.log.Info("Try and connect to RabbitMQ")
+	conn, err := amqp.Dial(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	c.log.Info("Connected")
+	return conn, err
+}
+
+//Configure Creates the Exchange and Queue
+func (c *MessageConsumer) Configure(ch *amqp.Channel) (err error) {
+
+	config := c.config
+
+	if len(config.Exchanges) > 0 {
+		for _, ex := range config.Exchanges {
+			err = ch.ExchangeDeclare(
 				ex.Name,         // name
 				ex.ExchangeType, // type
-				true,            // durable
+				ex.Durable,      // durable
 				false,           // auto-deleted
 				false,           // internal
 				false,           // no-wait
@@ -114,14 +124,14 @@ func (c *messageConsumer) Configure() (err error) {
 		}
 	}
 
-	if len(c.config.Queues) > 0 {
-		for _, qConfig := range c.config.Queues {
-			q, err := c.Channel.QueueDeclare(
+	if len(config.Queues) > 0 {
+		for _, qConfig := range config.Queues {
+			q, err := ch.QueueDeclare(
 				qConfig.Name,           // name
-				true,                   // durable
+				qConfig.Durable,        // durable
 				qConfig.DeleteOnUnused, // delete when unused
-				true,                   // exclusive
-				false,                  // no-wait
+				qConfig.Exclusive,      // exclusive
+				qConfig.NoWait,         // no-wait
 				nil,                    // arguments
 			)
 			if err != nil {
@@ -130,7 +140,7 @@ func (c *messageConsumer) Configure() (err error) {
 
 			if len(qConfig.Bindings) > 0 {
 				for _, bindingConfig := range qConfig.Bindings {
-					err := c.Channel.QueueBind(
+					err := ch.QueueBind(
 						q.Name,                   // queue name
 						bindingConfig.RoutingKey, // routing key
 						bindingConfig.Exchange,   // exchange
@@ -144,31 +154,13 @@ func (c *messageConsumer) Configure() (err error) {
 			}
 		}
 	}
+
 	return
 }
 
-func (c *messageConsumer) Consume() (<-chan amqp.Delivery, error) {
-	if c.Channel != nil {
-		c.log.Debug("Registering Consumer")
-
-		// @Todo this should return slices
-		return c.Channel.Consume(
-			c.config.Queues[0].Name, // queue
-			"pipefire",              // consumer
-			true,                    // auto-ack
-			false,                   // exclusive
-			false,                   // no-local
-			false,                   // no-wait
-			nil,                     // args
-		)
-	}
-	return nil, errors.New("can't register consumer, channel is not open")
-}
-
-func (c *messageConsumer) Close() error {
-
+// Close Closes the connection to the rabbitmq server
+func (c *MessageConsumer) Close() error {
 	err := c.Connection.Close()
-
 	return err
 }
 

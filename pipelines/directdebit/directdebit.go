@@ -2,9 +2,7 @@ package directdebit
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/google/uuid"
@@ -12,11 +10,12 @@ import (
 	mysql "github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/gorm"
 	log "github.com/sirupsen/logrus"
+	"github.com/streadway/amqp"
 )
 
 // Pipeline is an implementation of a pipeline
 type Pipeline interface {
-	StartListener(chan error)
+	StartListener(listenerError chan error)
 	Execute(string) []error
 	Close() error
 	sftpGet(conf *SftpConfig) error
@@ -90,70 +89,127 @@ func New(config *PipelineConfig) (Pipeline, error) {
 	}
 
 	if config.Rabbitmq.Host != "" {
-		consumer, err := NewConsumer(&config.Rabbitmq, p.log)
-		if err != nil {
-			return nil, err
-		}
-		p.consumer = &consumer
+
+		p.consumer = NewConsumer(&config.Rabbitmq, p.log)
+
 	}
 
 	return p, nil
 }
 
-func (p *ddPipeline) StartListener(errCh chan error) {
+func (p *ddPipeline) StartListener(listenerError chan error) {
 
-	consumer := *p.consumer
-
-	if err := consumer.Configure(); err != nil {
-		p.log.Errorf("Unable to register Exchanges and Queues : %s ", err.Error())
-	}
-
-	deliveryChannel, err := consumer.Consume()
+	conn, err := p.consumer.Connect()
 	if err != nil {
-		p.log.Errorf("Unable to Consume Messages %s", err.Error())
-
-		// Send the error to the channel
-		errCh <- err
+		listenerError <- err
+		// goroutine will block forever if we don't return
+		return
 	}
 
-	log.Info("Consumer Registered Listening")
+	if conn == nil || conn.IsClosed() {
+		listenerError <- fmt.Errorf("RabbitMQ Connection is in an unexpected state")
+		// goroutine will block forever if we don't return
+		return
+	}
 
-	for d := range deliveryChannel {
-		log.Tracef("Message Body: [%s] ", d.Body)
-		log.Debugf("#goroutines: %d\n", runtime.NumGoroutine())
-		// json decode
-		payload := &TransferFilesPayload{}
-		if err := json.Unmarshal(d.Body, payload); err != nil {
-			// @todo publish message to the error queue
-			log.Error("Unable to unmarshal the message. Please ensure that the message is valid")
-			log.Errorf("Invalid Message is %s ", d.Body)
-		}
+	// we want to know if the connection get's closed
 
-		correlationID := payload.Message.CorrelationID
-		if correlationID == "" || correlationID == "00000000-0000-0000-0000-000000000000" {
-			// generate a unique one
-			log.Warn("invalid uuid. Generating a new one")
-			correlationID = uuid.New().String()
-		}
+	rabbitCloseError := make(chan *amqp.Error)
+	conn.NotifyClose(rabbitCloseError)
 
-		if len(correlationID) > 0 {
-			errs := p.Execute(correlationID)
-			if len(errs) > 0 {
-				log.Warning("Pipeline Completed With Errors")
-				for _, e := range errs {
-					log.Error(e.Error())
-				}
-			} else {
-				log.Info("Pipeline Completed Without Errors")
+	p.log.Debug("Creating Channel")
+	consumerCh, err := conn.Channel()
+	if err != nil {
+		p.log.Errorf("Unable to create Channel : %s ", err.Error())
+		listenerError <- err
+		close(rabbitCloseError)
+
+		// goroutine will block forever if we don't return
+		return
+	}
+
+	p.log.Debug("Creating Exchanges and Queues")
+	// Setup the Exchanges and the Queues
+	if err := p.consumer.Configure(consumerCh); err != nil {
+		listenerError <- err
+		return
+	}
+
+	p.log.Info("Opening Consumer Channel")
+	firehose, err := consumerCh.Consume(
+		p.consumer.config.Queues[0].Name,
+		"pipefire",
+		false,
+		false,
+		false,
+		false,
+		nil)
+
+	if err != nil {
+		// channelError <- err
+		// goroutine will block forever if we don't return
+		listenerError <- err
+		return
+	}
+
+	for {
+		select {
+		case err := <-rabbitCloseError:
+			if conn != nil && !conn.IsClosed() {
+				// can't imagine how it wwuld get to here
+				// but handle it to be safe
+				_ = conn.Close()
 			}
-		} else {
-			log.Error("Message payload did not include a correlationId, aborting. Resend Message with a correlationId")
+			_ = consumerCh.Cancel("pipefire", false)
+			p.log.Warning("RabbitMQ Connection has gone away")
+			listenerError <- err
+
+			p.log.Info("Shutting Down Listener")
+			return
+		case msg := <-firehose:
+			p.log.Tracef("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
+
+			if msg.Body == nil || len(msg.Body) < 2 {
+				break
+				// p.log.Errorf("Message Payload of [%s] is too small or doesn't exist", msg.Body)
+				//msg.Reject(false)
+				// @todo move to error queue
+			}
+
+			payload := &TransferFilesPayload{}
+
+			err := json.Unmarshal(msg.Body, payload)
+			if err != nil {
+				// @todo move to error queue
+				p.log.Errorf("Unable to unmarshall payload")
+				msg.Reject(false)
+				break
+			}
+
+			// de-serialise
+			if payload != nil && payload.Message.CorrelationID == "00000000-0000-0000-0000-000000000000" {
+				payload.Message.CorrelationID = uuid.New().String()
+				// this is useless so make a random one and log it
+				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.Message.CorrelationID)
+				// @todo move to error queue
+
+			}
+
+			errList := p.Execute(payload.Message.CorrelationID)
+			if len(errList) > 0 {
+				p.log.Info("Direct Debit Run Finished With Errors")
+				for _, e := range errList {
+					p.log.Errorf("%s ", e.Error())
+				}
+				// don't requeue at this stage
+				msg.Nack(false, false)
+			} else {
+				p.log.Info("Direct Debit Run Completed Successfully")
+				msg.Ack(true)
+			}
+
 		}
-
 	}
-
-	log.Warning("Listener Stopped")
-	errCh <- errors.New("Channel went away")
 }
 
 // Execute starts the execution of the pipeline
