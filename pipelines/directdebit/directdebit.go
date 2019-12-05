@@ -93,7 +93,6 @@ func New(config *PipelineConfig) (Pipeline, error) {
 	if config.Rabbitmq.Host != "" {
 
 		p.consumer = NewConsumer(&config.Rabbitmq, p.log)
-
 	}
 
 	return p, nil

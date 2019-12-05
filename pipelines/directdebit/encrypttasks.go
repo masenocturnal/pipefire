@@ -1,6 +1,8 @@
 package directdebit
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -129,8 +131,23 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 		for _, fileToEncrypt := range fileList {
 			f := filepath.Join(srcDir, fileToEncrypt.Name())
 			o := filepath.Join(outputDir, fileToEncrypt.Name())
+
 			// hash file
+			hash, err := crypto.HashFile(f)
+			if err != nil {
+				errorList = append(errorList, err)
+			}
+			txn := p.encryptionLog.Conn.BeginTx(context.Background, &sql.TxOptions{Isolation: sql.LevelSerializable})
 			// record file
+			record := &EncryptionRecord{
+				LocalFileName: f,
+				LocalFilePath: f,
+				LocalFileSize: fileToEncrypt.Size(),
+				LocalFileHash: hash,
+				CorrelationID: p.correlationID,
+			}
+			txn = p.
+				p.encryptionLog.Create()
 			// encrypt file
 			err = cryptoProvider.EncryptFile(f, o+".gpg")
 			if err != nil {
