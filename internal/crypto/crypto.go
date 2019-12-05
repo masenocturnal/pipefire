@@ -111,9 +111,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		FileName: "",
 	}
 
-	// compConfig := &packet.CompressionConfig{
-	// 	Level: packet.DefaultCompression,
-	// }
+
 	// create new default
 	packConfig := &packet.Config{
 		DefaultHash:            crypto.SHA1,
