@@ -11,7 +11,6 @@ import (
 
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
-	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -19,17 +18,6 @@ import (
 const version string = "0.9.11"
 
 func main() {
-
-	cntxt := &daemon.Context{
-		PidFileName: "pipfire.pid",
-		PidFilePerm: 0644,
-		LogFileName: "pipefire.log",
-		LogFilePerm: 0640,
-		WorkDir:     "./",
-		Umask:       027,
-		Args:        []string{"[go-daemon sample]"},
-	}
-	_ = cntxt
 
 	log.Infof("PipeFire Daemon Started. Version : %s ", version)
 
@@ -52,17 +40,22 @@ func executePipelines() {
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
-			log.Println("Unable to find a configuration file")
+			log.Fatal("Unable to find a configuration file")
 		} else {
 			// Config file was found but another error was produced
-			log.Print("Encountered error: " + err.Error())
+			log.Fatal("Encountered error: " + err.Error())
 		}
 		os.Exit(1)
 	}
-	initLogging(hostConfig.LogLevel)
+
+	initLogging(hostConfig.GetString("loglevel"))
+	ddConfig := &directdebit.PipelineConfig{}
 
 	// @todo make this dynamic
-	ddConfig := hostConfig.Pipelines["directdebit"]
+	err = hostConfig.UnmarshalKey("pipelines.directdebit", ddConfig)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	// create the dd pipeline
 	directDebitPipeline, err := directdebit.New(ddConfig)

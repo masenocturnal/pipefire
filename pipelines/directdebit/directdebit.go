@@ -54,20 +54,12 @@ type ddPipeline struct {
 }
 
 // New Pipeline
-func New(config interface{}) (Pipeline, error) {
-
-	c := config.(PipelineConfig)
+func New(c *PipelineConfig) (Pipeline, error) {
 
 	log := log.WithField("Pipeline", "DirectDebit")
 
-	// // marshal to ddconfig
-	// if err := json.Unmarshal([]byte(config), c); err != nil {
-	// 	log.Error("The configuration for the Direct Debit Pipeline is malformed or invalid")
-	// 	return nil, err
-	// }
-
 	var p *ddPipeline = &ddPipeline{
-		taskConfig: &c,
+		taskConfig: c,
 		log:        log,
 	}
 
