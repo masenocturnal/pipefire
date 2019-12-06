@@ -136,8 +136,10 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 			hash, err := crypto.HashFile(f)
 			if err != nil {
 				errorList = append(errorList, err)
+				// skip this file
+				break
 			}
-			txn := p.encryptionLog.Conn.BeginTx(context.Background, &sql.TxOptions{Isolation: sql.LevelSerializable})
+			txn := p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
 			// record file
 			record := &EncryptionRecord{
 				LocalFileName: f,
@@ -146,8 +148,16 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 				LocalFileHash: hash,
 				CorrelationID: p.correlationID,
 			}
-			txn = p.
-				p.encryptionLog.Create()
+
+			err = p.encryptionLog.Create(txn, record)
+			if err != nil {
+				errorList = append(errorList, err)
+			}
+
+			res := txn.Commit()
+			if res.Error != nil {
+
+			}
 			// encrypt file
 			err = cryptoProvider.EncryptFile(f, o+".gpg")
 			if err != nil {

@@ -18,11 +18,11 @@ type Pipeline interface {
 	StartListener(listenerError chan error)
 	Execute(string) []error
 	Close() error
-	sftpGet(conf *SftpConfig) error
-	sftpTo(conf *SftpConfig) error
-	archiveTransferred(conf *ArchiveConfig) error
-	cleanDirtyFiles(conf *CleanUpConfig) []error
-	pgpEncryptFilesForBank(conf *EncryptFilesConfig) []error
+	sftpGet(conf *SftpConfig) error                          // @todo this shouldn't be part of the generic interface
+	sftpTo(conf *SftpConfig) error                           // @todo this shouldn't be part of the generic interface
+	archiveTransferred(conf *ArchiveConfig) error            // @todo this shouldn't be part of the generic interface
+	cleanDirtyFiles(conf *CleanUpConfig) []error             // @todo this shouldn't be part of the generic interface
+	pgpEncryptFilesForBank(conf *EncryptFilesConfig) []error // @todo this shouldn't be part of the generic interface
 }
 
 //TasksConfig Configuration
@@ -54,15 +54,25 @@ type ddPipeline struct {
 }
 
 // New Pipeline
-func New(config *PipelineConfig) (Pipeline, error) {
+func New(config interface{}) (Pipeline, error) {
+
+	c := config.(PipelineConfig)
+
+	log := log.WithField("Pipeline", "DirectDebit")
+
+	// // marshal to ddconfig
+	// if err := json.Unmarshal([]byte(config), c); err != nil {
+	// 	log.Error("The configuration for the Direct Debit Pipeline is malformed or invalid")
+	// 	return nil, err
+	// }
 
 	var p *ddPipeline = &ddPipeline{
-		taskConfig: config,
-		log:        log.WithField("Pipeline", "DirectDebit"),
+		taskConfig: &c,
+		log:        log,
 	}
 
-	if config.Database.Addr != "" {
-		dbConfig := config.Database
+	if c.Database.Addr != "" {
+		dbConfig := c.Database
 		dbConfig.ParseTime = true
 
 		redact := func(r rune) rune {
@@ -90,9 +100,9 @@ func New(config *PipelineConfig) (Pipeline, error) {
 		p.transferlog = NewEncryptionRecorder(db, p.log)
 	}
 
-	if config.Rabbitmq.Host != "" {
+	if c.Rabbitmq.Host != "" {
 
-		p.consumer = NewConsumer(&config.Rabbitmq, p.log)
+		p.consumer = NewConsumer(&c.Rabbitmq, p.log)
 	}
 
 	return p, nil

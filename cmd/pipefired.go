@@ -62,10 +62,10 @@ func executePipelines() {
 	initLogging(hostConfig.LogLevel)
 
 	// @todo make this dynamic
-	ddConfig := hostConfig.Pipelines.DirectDebit
+	ddConfig := hostConfig.Pipelines["directdebit"]
 
 	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(&ddConfig)
+	directDebitPipeline, err := directdebit.New(ddConfig)
 	if err != nil {
 		log.Error(err.Error())
 		os.Exit(1)

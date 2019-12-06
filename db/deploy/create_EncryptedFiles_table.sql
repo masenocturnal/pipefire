@@ -8,7 +8,7 @@ CREATE TABLE EncryptedFiles (
     `recipient_key`   TEXT COMMENT 'Fingerprint of the recipients key',
     `signing_key`      TEXT COMMENT 'Fingerprint of the signing key',
     `local_file_hash`  VARCHAR(254) COMMENT 'Local File Hash',
-    'encrypted_file_hash' VARCHAR(254) COMMENT 'Hash of the encrypted file',
+    `encrypted_file_hash` VARCHAR(254) COMMENT 'Hash of the encrypted file',
     `correlation_id`    VARCHAR(254) COMMENT 'CorrelationId',
     `created_at`       DATETIME NOT NULL COMMENT "Date record was added",
     `updated_at`       DATETIME COMMENT "Date record was updated",
@@ -17,3 +17,4 @@ CREATE TABLE EncryptedFiles (
     UNIQUE INDEX pk_local_file_hash USING HASH (local_file_hash)
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_bin;
+
