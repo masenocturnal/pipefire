@@ -19,15 +19,19 @@ type HostConfig struct {
 }
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
-func ReadApplicationConfig(configName string) (*viper.Viper, error) {
+func ReadApplicationConfig(path string) (*viper.Viper, error) {
 
 	// conf := micro.NewConfig()
 	conf := viper.New()
+	conf.SetConfigName("pipefired")
 	//conf.Set("Verbose", true)
-	conf.SetConfigName(configName)
-	conf.AddConfigPath("/etc/pipefire/")
-	conf.AddConfigPath("../config/")
-	conf.AddConfigPath("./")
+	if len(path) > 0 {
+		conf.AddConfigPath(path)
+	} else {
+		conf.AddConfigPath("/etc/pipefire/")
+		conf.AddConfigPath("../config/")
+		conf.AddConfigPath("./")
+	}
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
