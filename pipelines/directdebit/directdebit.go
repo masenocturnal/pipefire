@@ -64,40 +64,46 @@ func New(c *PipelineConfig) (Pipeline, error) {
 	}
 
 	if c.Database.Addr != "" {
-		dbConfig := c.Database
-		dbConfig.ParseTime = true
-
-		redact := func(r rune) rune {
-			return '*'
-		}
-
-		redactedPw := strings.Map(redact, dbConfig.Passwd)
-
-		log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
-
-		if err := mysql.SetLogger(p.log); err != nil {
-			return nil, err
-		}
-
-		// if config.Database {
-		connectionString := dbConfig.FormatDSN()
-		db, err := gorm.Open("mysql", connectionString)
+		db, err := connectToDb(c.Database)
 		if err != nil {
-			return nil, fmt.Errorf("Unable to connect to the database: %s", err.Error())
+			return nil, err
 		}
 		db.SetLogger(p.log)
 		db.LogMode(true)
-
 		p.transferlog = NewTransferRecorder(db, p.log)
 		p.transferlog = NewEncryptionRecorder(db, p.log)
 	}
 
 	if c.Rabbitmq.Host != "" {
-
 		p.consumer = NewConsumer(&c.Rabbitmq, p.log)
 	}
 
 	return p, nil
+}
+
+func connectToDb(dbConfig mysql.Config) (*gorm.DB, error) {
+
+	dbConfig.ParseTime = true
+
+	redact := func(r rune) rune {
+		return '*'
+	}
+
+	redactedPw := strings.Map(redact, dbConfig.Passwd)
+
+	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
+
+	// if err := mysql.SetLogger(p.log); err != nil {
+	// 	return nil, err
+	// }
+
+	// if config.Database {
+	connectionString := dbConfig.FormatDSN()
+	db, err := gorm.Open("mysql", connectionString)
+	if err != nil {
+		return nil, fmt.Errorf("Unable to connect to the database: %s", err.Error())
+	}
+	return db, err
 }
 
 func (p *ddPipeline) StartListener(listenerError chan error) {
