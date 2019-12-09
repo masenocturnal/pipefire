@@ -71,7 +71,7 @@ func New(c *PipelineConfig) (Pipeline, error) {
 		db.SetLogger(p.log)
 		db.LogMode(true)
 		p.transferlog = NewTransferRecorder(db, p.log)
-		p.transferlog = NewEncryptionRecorder(db, p.log)
+		p.encryptionLog = NewEncryptionRecorder(db, p.log)
 	}
 
 	if c.Rabbitmq.Host != "" {

@@ -1,6 +1,6 @@
 
-DROP TABLE IF EXISTS EncryptedFiles;
-CREATE TABLE EncryptedFiles (
+DROP TABLE IF EXISTS EncryptionRecord;
+CREATE TABLE EncryptionRecord (
     `id` int AUTO_INCREMENT  PRIMARY KEY,
     `local_file_name` VARCHAR(254) NOT NULL COMMENT 'The name of the file on disk',
     `local_file_path` TEXT NOT NULL COMMENT 'Absolute path to the file on the disk',

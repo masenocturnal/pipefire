@@ -18,7 +18,7 @@ func getPipeline(tasksConfig *TasksConfig) (Pipeline, error) {
 	return pipeline, err
 }
 
-var configPath string = "../config/pipefired.json"
+var configPath string = "../../config/"
 
 func setup(t *testing.T) (*PipelineConfig, error) {
 	abs, err := filepath.Abs(configPath)
