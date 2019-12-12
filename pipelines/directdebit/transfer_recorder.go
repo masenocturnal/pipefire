@@ -92,28 +92,78 @@ func (t TransferLog) RecordError(txn *gorm.DB, rec *TransferRecord) error {
 	return nil
 }
 
+//AvailableToSend Represents a row of files
+//which have been encrypted and are available to send
+type AvailableToSend struct {
+	plaintextFileHash   string
+	fileToTransfer      string
+	fileToTransferHash  string
+	remoteHost          string
+	transferredFileHash string
+	remoteFileSize      int
+}
+
 //FileAlreadySent Determines if a file has been
 func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost string) (bool, error) {
-	var rec TransferRecord
-	var myCount []int = make([]int, 1)
-	sql := fmt.Sprintf(`SELECT count(id) as noRecords
-		FROM %s
-		WHERE local_file_hash = ? and remote_host = ? and deleted_at IS NULL
-		AND (
-			remote_file_name <> '' 
-			AND  remote_file_size > 0 
-			AND (
-				transferred_file_hash IS NOT NULL 
-				OR transferred_file_hash <> ''
-			)
-		)`, rec.TableName())
 
-	err := txn.Raw(sql, hash, remoteHost).Pluck("noRecords", &myCount).Error
-	if err == nil && len(myCount) == 1 {
-		t.log.Debugf("%d records found", myCount[0])
-		y := (myCount[0] > 0)
-		return y, err
+	//tr := &TransferRecord{}
+	// er := &EncryptionRecord{}
+
+	sql := `
+	SELECT 
+		er.local_file_hash as plaintext_file_hash
+		,tr.local_file_name as file_to_transfer
+		,tr.local_file_hash as file_to_transfer_hash
+		,tr.remote_host
+		,tr.transferred_file_hash    
+		,tr.remote_file_size
+	FROM 
+		EncryptionRecord er   
+		LEFT JOIN TransferRecord tr ON tr.local_file_hash = er.encrypted_file_hash
+	WHERE 
+		er.local_file_hash IS NOT NULL
+		AND tr.local_file_hash = ?
+		AND er.encrypted_file_hash IS NOT NULL
+		AND tr.deleted_at IS NULL 
+		AND er.deleted_at IS NULL`
+
+	res := txn.Raw(sql, hash)
+	if res.Error != nil {
+		t.log.Error(res.Error.Error())
+		return false, fmt.Errorf("Unable to confirm that file has not been sent previously")
 	}
+
+	rows, err := res.Rows()
+	if err != nil {
+		t.log.Error(err.Error())
+		return false, fmt.Errorf("Unable to confirm that file has not been sent previously")
+	}
+	defer rows.Close()
+
+	rows.Next()
+
+	var row AvailableToSend
+	err = rows.Scan(
+		&row.plaintextFileHash,
+		&row.fileToTransfer,
+		&row.plaintextFileHash,
+		&row.remoteHost,
+		&row.transferredFileHash,
+		&row.remoteFileSize,
+	)
+	if err != nil {
+		// handle this error
+		t.log.Error(err.Error())
+	}
+
+	if (row.transferredFileHash != "" || row.remoteFileSize > 0) && row.remoteHost == remoteHost {
+		// It looks like the file has been sent
+		t.log.Warnf("File has been sent previously")
+
+		return true, nil
+	}
+
+	// File has NOT been sent before
 	return false, err
 }
 
