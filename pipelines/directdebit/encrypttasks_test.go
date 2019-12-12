@@ -45,11 +45,11 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 	}
 
 	tasksConfig := &TasksConfig{
-		EncryptFiles: *encryptConfig,
+		EncryptFiles: encryptConfig,
 	}
 
 	ddConfig := &PipelineConfig{}
-	ddConfig.Tasks = *tasksConfig
+	ddConfig.Tasks = tasksConfig
 
 	pipeline, err := New(ddConfig)
 	if err != nil {

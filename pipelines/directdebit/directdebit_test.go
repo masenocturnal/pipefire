@@ -11,7 +11,7 @@ func getPipeline(tasksConfig *TasksConfig) (Pipeline, error) {
 	// logEntry := log.WithField("test", "test")
 
 	ddConfig := &PipelineConfig{}
-	ddConfig.Tasks = *tasksConfig
+	ddConfig.Tasks = tasksConfig
 
 	pipeline, err := New(ddConfig)
 
