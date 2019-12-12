@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	mysql "github.com/go-sql-driver/mysql"
 	"github.com/masenocturnal/pipefire/internal/crypto"
 )
 
@@ -129,21 +130,22 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 
 	if len(fileList) > 0 {
 		for _, fileToEncrypt := range fileList {
-			f := filepath.Join(srcDir, fileToEncrypt.Name())
-			o := filepath.Join(outputDir, fileToEncrypt.Name())
+			plainText := filepath.Join(srcDir, fileToEncrypt.Name())
+			cryptFile := filepath.Join(outputDir, fileToEncrypt.Name()+".gpg")
 
 			// hash file
-			hash, err := crypto.HashFile(f)
+			hash, err := crypto.HashFile(plainText)
 			if err != nil {
 				errorList = append(errorList, err)
 				// skip this file
 				break
 			}
-			txn := p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
+			txn := p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+
 			// record file
 			record := &EncryptionRecord{
-				LocalFileName: f,
-				LocalFilePath: f,
+				LocalFileName: plainText,
+				LocalFilePath: plainText,
 				LocalFileSize: fileToEncrypt.Size(),
 				LocalFileHash: hash,
 				CorrelationID: p.correlationID,
@@ -151,18 +153,71 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 
 			err = p.encryptionLog.Create(txn, record)
 			if err != nil {
-				errorList = append(errorList, err)
+				p.log.Errorf("Unable to create encryption record for %s ", plainText)
+				p.log.Debugf("Creating error %s ", err.Error())
+				// try cast to mysql error
+				dbErr := err.(*mysql.MySQLError)
+				if dbErr != nil && dbErr.Number == 1062 {
+					p.log.Warningf("File %s with hash %s has been processed before", plainText, hash)
+					txn.Rollback()
+					continue
+				} else {
+					errorList = append(errorList, fmt.Errorf("Unable to create record %s ", err.Error()))
+					txn.Rollback()
+					continue
+				}
 			}
-
 			res := txn.Commit()
 			if res.Error != nil {
-
+				txn.RollbackUnlessCommitted()
 			}
+
+			txn = p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+
 			// encrypt file
-			err = cryptoProvider.EncryptFile(f, o+".gpg")
+			err = cryptoProvider.EncryptFile(plainText, cryptFile)
 			if err != nil {
-				p.log.Warningf("Error encrypting file %s : %s", f, err.Error())
+				p.log.Warningf("Error encrypting file %s : %s", plainText, err.Error())
 				errorList = append(errorList, err)
+				txn.Rollback()
+				continue
+			}
+
+			record.EncryptedFileHash, _ = hashFile(cryptFile)
+
+			// get the encryption key
+			recipientKey, err := cryptoProvider.GetEncryptionKey()
+			if err != nil {
+				errorList = append(errorList, err)
+				txn.Rollback()
+				continue
+			}
+
+			// get the signing key
+			signingKey, err := cryptoProvider.GetSigningKey()
+
+			// @todo we are assuming that the encryption key is the public key.
+			// This my not be correct
+			record.RecipientKey = recipientKey.PrimaryKey.KeyIdString()
+
+			if signingKey != nil && signingKey.PrimaryKey != nil {
+				signingKeyFingerprint := signingKey.PrivateKey.KeyIdString()
+				if len(signingKeyFingerprint) > 0 {
+					record.SigningKey = signingKeyFingerprint
+				}
+			}
+
+			err = p.encryptionLog.Update(txn, record)
+			if err != nil {
+				errorList = append(errorList, err)
+				txn.Rollback()
+				break
+			}
+
+			// commit the transaction
+			res = txn.Commit()
+			if res.Error != nil {
+				txn.RollbackUnlessCommitted()
 			}
 		}
 	} else {
