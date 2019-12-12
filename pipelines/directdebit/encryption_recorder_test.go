@@ -1,13 +1,14 @@
 package directdebit
 
 import (
-	"github.com/google/uuid"
-	"github.com/masenocturnal/pipefire/internal/crypto"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/google/uuid"
+	"github.com/masenocturnal/pipefire/internal/crypto"
+	log "github.com/sirupsen/logrus"
 )
 
 func TestRecordEncryptionCreate(t *testing.T) {
