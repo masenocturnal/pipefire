@@ -175,12 +175,12 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 			p.log.Info("Shutting Down Listener")
 			return
 		case msg := <-firehose:
-			p.log.Tracef("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
 
 			if msg.Body == nil || len(msg.Body) < 2 {
 				break
 			}
 
+			p.log.Debugf("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
 			payload := &TransferFilesPayload{}
 
 			err := json.Unmarshal(msg.Body, payload)
