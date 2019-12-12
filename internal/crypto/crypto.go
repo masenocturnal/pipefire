@@ -38,6 +38,8 @@ type ProviderConfig struct {
 type Provider interface {
 	EncryptFile(string, string) error
 	DecryptFile(string, string) error
+	GetEncryptionKey() (encryptionKey *openpgp.Entity, err error)
+	GetSigningKey() (signingKey *openpgp.Entity, err error)
 }
 
 type provider struct {
@@ -60,6 +62,48 @@ func (p provider) DecryptFile(encryptedFile, outputFile string) error {
 	return nil
 }
 
+//GetEncryptionKey Returns the currently configured encryption key
+func (p provider) GetEncryptionKey() (encryptionKey *openpgp.Entity, err error) {
+
+	if len(p.config.EncryptionKey) > 0 {
+
+		encryptionKey, err = p.keyFromFile(p.config.EncryptionKey, false)
+		if err != nil {
+			p.log.Errorf("Unable to load the encryption key %s ", p.config.EncryptionKey)
+			return nil, err
+		}
+		return
+	}
+	// encryption key has not been specified in the configuration
+	return
+}
+
+//GetEncryptionKey Returns the currently configured signing key
+func (p provider) GetSigningKey() (signingKey *openpgp.Entity, err error) {
+
+	c := p.config
+	if len(c.SigningKey) > 0 {
+		p.log.Debugf("Signing with %s", c.SigningKey)
+		if len(c.SigningKeyPassword) > 0 {
+			signingKey, err = p.decryptArmoredKey(c.SigningKey, c.SigningKeyPassword)
+			if err != nil {
+				return
+			}
+
+		} else {
+			signingKey, err = p.keyFromFile(c.SigningKey, false)
+			if err != nil {
+				return
+			}
+		}
+
+		p.log.Debug("Signing key loaded ")
+		return
+	}
+	// signing key has not been specified in the configuration
+	return
+}
+
 //EncryptFile provides a simple wrapper to encrypt a file
 func (p provider) EncryptFile(plainTextFile string, outputFile string) (err error) {
 	p.log.Debugf("Encrypting file %s", plainTextFile)
@@ -67,31 +111,14 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	p.log.Debugf("Using EncryptionKey %s ", p.config.EncryptionKey)
 
 	// Read in public key
-	recipientKey, err := p.keyFromFile(p.config.EncryptionKey, false)
-
+	recipientKey, err := p.GetEncryptionKey()
 	if err != nil {
 		return
 	}
-	p.log.Debug("Key found and loaded successfully")
-	recipientKeys := []*openpgp.Entity{recipientKey}
 
-	var signingKey *openpgp.Entity = nil
-	if len(p.config.SigningKey) > 0 {
-		p.log.Debugf("Signing with %s", p.config.SigningKey)
-		if len(p.config.SigningKeyPassword) > 0 {
-			signingKey, err = p.decryptArmoredKey(p.config.SigningKey, p.config.SigningKeyPassword)
-			if err != nil {
-				return err
-			}
-
-		} else {
-			signingKey, err = p.keyFromFile(p.config.SigningKey, false)
-			if err != nil {
-				return err
-			}
-		}
-
-		p.log.Debug("Signing key loaded ")
+	signingKey, err := p.GetSigningKey()
+	if err != nil {
+		return
 	}
 
 	inFile, err := os.Open(plainTextFile)
@@ -111,7 +138,6 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		FileName: "",
 	}
 
-
 	// create new default
 	packConfig := &packet.Config{
 		DefaultHash:            crypto.SHA1,
@@ -119,6 +145,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 	}
 
 	// @todo currently uses defaults, should we provide other encryption options?
+	recipientKeys := []*openpgp.Entity{recipientKey}
 	wc, err := openpgp.Encrypt(outFile, recipientKeys, signingKey, hints, packConfig)
 	if err != nil {
 		return err
@@ -143,7 +170,7 @@ func (p provider) EncryptFile(plainTextFile string, outputFile string) (err erro
 		return fmt.Errorf("File size of : %d does not equal the %d bytes encrypted", s.Size(), bytes)
 	}
 
-	p.log.Debugf("Decrypted file to %s", plainTextFile)
+	p.log.Debugf("Encrypted file to %s", plainTextFile)
 
 	return
 }
