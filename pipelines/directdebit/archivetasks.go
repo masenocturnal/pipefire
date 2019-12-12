@@ -12,9 +12,9 @@ import (
 
 //ArchiveConfig configuration for the archive task
 type ArchiveConfig struct {
-	Src     string `json:"src"`
-	Dest    string `json:"dest"`
-	Enabled bool   `json:"enabled"`
+	Src     string
+	Dest    string
+	Enabled bool
 }
 
 // ArchiveTransferred Creates a tar archive of the encrypted files.
