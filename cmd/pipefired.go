@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
+	"path"
 	"runtime"
 	"strings"
 	"syscall"
@@ -36,7 +39,7 @@ func main() {
 
 func executePipelines() {
 	// @todo shift this to the pipeline
-	hostConfig, err := config.ReadApplicationConfig("pipefired")
+	hostConfig, err := config.ReadApplicationConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
@@ -49,32 +52,52 @@ func executePipelines() {
 	}
 
 	initLogging(hostConfig.GetString("loglevel"))
-	ddConfig := &directdebit.PipelineConfig{}
 
-	// @todo make this dynamic
-	err = hostConfig.UnmarshalKey("pipelines.directdebit", ddConfig)
+	c := &config.HostConfig{}
+	err = hostConfig.Unmarshal(c)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
-	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(ddConfig)
-	if err != nil {
-		log.Error(err.Error())
-		os.Exit(1)
+	selectedConfig := hostConfig.ConfigFileUsed()
+	selectedDir := path.Dir(selectedConfig)
+	log.Infof("Using %s", selectedConfig)
+
+	pipelineName := "directdebit"
+	if c.Pipelines[pipelineName] != "" {
+		file := c.Pipelines[pipelineName]
+		x := path.Join(selectedDir, file)
+		log.Infof("looking for %s", x)
+		jsonText, err := ioutil.ReadFile(x)
+		if err != nil {
+			log.Warningf("Unable to read file %s for pipeline %s", file, pipelineName)
+		}
+
+		ddConfig := &directdebit.PipelineConfig{}
+		if err := json.Unmarshal(jsonText, ddConfig); err != nil {
+			log.Fatal("Unable to load config for directdebit pipeline")
+		}
+
+		// create the dd pipeline
+		directDebitPipeline, err := directdebit.New(ddConfig)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
+		for {
+
+			log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+			listenerError := make(chan error)
+
+			go directDebitPipeline.StartListener(listenerError)
+			err := <-listenerError
+
+			log.Warningf("RabbitMQ Reconnect Required: %s", err)
+			time.Sleep(2 * time.Second)
+		}
 	}
 
-	for {
-
-		log.Debugf("No of goroutines %d", runtime.NumGoroutine())
-		listenerError := make(chan error)
-
-		go directDebitPipeline.StartListener(listenerError)
-		err := <-listenerError
-
-		log.Warningf("RabbitMQ Reconnect Required: %s", err)
-		time.Sleep(2 * time.Second)
-	}
 }
 
 func initLogging(lvl string) {
