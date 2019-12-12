@@ -140,7 +140,6 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 		// create a synchronous transaction so that only 1 process can update the database at a time
 		tx := p.transferlog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
 
-		// i don't like this duplication
 		fileHash, err := hashFile(cur)
 		if err != nil {
 			return err
