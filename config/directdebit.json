@@ -1,0 +1,148 @@
+{
+	"database": {
+		"user": "root",
+		"net": "tcp",
+		"addr": "172.20.1.2:3306",
+		"passwd": "foobar123",
+		"dbname": "pipefire",
+		"allowNativePasswords": true
+	},
+	"rabbitmq": {
+		"user": "guest",
+		"password": "guest",
+		"host": "172.20.1.6",
+		"port": "5672",
+		"vhost": "banking",
+		"exchanges": [{
+				"name": "BankFileTransfer.Incoming",
+				"exchangeType": "fanout",
+				"durable": true
+			},
+			{
+				"name": "BankFileTransfer.Incoming_error",
+				"exchangeType": "fanout",
+				"durable": true
+			}
+		],
+		"queues": [{
+				"name": "BankFileTransfer.Incoming",
+				"durable": true,
+				"deleteOnUnused": false,
+				"exclusive": false,
+				"noWait": true,
+				"args": "",
+				"bindings": [{
+					"routingKey": "",
+					"exchange": "BankFileTransfer.Incoming"
+				}]
+			},
+			{
+				"name": "BankFileTransfer.Incoming_error",
+				"durable": true,
+				"deleteOnUnused": false,
+				"exclusive": false,
+				"noWait": true,
+				"args": "",
+				"bindings": [{
+					"routingKey": "",
+					"exchange": "BankFileTransfer.Incoming"
+				}]
+			}
+		]
+	},
+	"tasks": {
+		"getFilesFromBFP": {
+			"remoteDir": "./Pickup",
+			"localDir": "/tmp/ddrun/Pickup",
+			"sftp": {
+				"host": "172.20.1.3",
+				"key": "~/.ssh/id_rsa",
+				"username": "test",
+				"password": "",
+				"keyPassword": "",
+				"port": 22
+			},
+			"enabled": false
+		},
+		"cleanBFP": {
+			"remoteDir": "./Pickup",
+			"localDir": "",
+			"sftp": {
+				"host": "172.20.1.3",
+				"key": "/home/sysam/.ssh/bfp_rsa.pem",
+				"username": "test",
+				"password": "",
+				"keyPassword": "",
+				"port": 22
+			},
+			"enabled": false
+		},
+		"encryptFiles": {
+			"srcDir": "/tmp/ddrun/Pickup",
+			"outputDir": "/tmp/ddrun/Encrypted",
+			"providers": {
+				"anz": {
+					"encryptionKey": "/home/andmas/keys/public/anz.pub",
+					"fingerprint": "",
+					"signingKey": "",
+					"signingKeyPassword": "",
+					"encryptionKeyPassword": "",
+					"decryptionKey": "",
+					"srcDir": "GA",
+					"destDir": "ANZ",
+					"enabled": true
+				},
+				"px": {
+					"encryptionKey": "/home/andmas/keys/public/px.pub",
+					"fingerprint": "",
+					"signingKey": "",
+					"signingKeyPassword": "",
+					"encryptionKeyPassword": "",
+					"decryptionKey": "",
+					"srcDir": "PX",
+					"destDir": "PX",
+					"enabled": true
+				}
+			},
+			"enabled": false
+		},
+		"sftpFilesToANZ": {
+			"localDir": "/tmp/ddrun/Encrypted/ANZ",
+			"remoteDir": "./Out/Certegy/DE/",
+			"sftp": {
+				"host": "172.20.1.4",
+				"key": "~/.ssh/id_rsa",
+				"username": "test",
+				"password": "",
+				"keyPassword": "1loverhia",
+				"port": 22
+			},
+			"enabled": true
+		},
+		"sftpFilesToPx": {
+			"localDir": "/tmp/ddrun/Encrypted/PX",
+			"remoteDir": "./In",
+			"sftp": {
+				"host": "172.20.1.5",
+				"key": "~/.ssh/id_rsa",
+				"username": "test",
+				"password": "",
+				"keyPassword": "1loverhia",
+				"port": 22
+			},
+			"enabled": true
+		},
+		"archiveTransferred": {
+			"src": "/tmp/ddrun/Encrypted",
+			"dest": "/tmp/send_files/",
+			"enabled": false
+		},
+		"cleanDirtyFiles": {
+			"paths": [
+				"/tmp/ddrun/Pickup/",
+				"/tmp/ddrun/Encrypted"
+			],
+			"enabled": false
+		}
+	}
+}

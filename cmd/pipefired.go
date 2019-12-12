@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/signal"
+	"path"
 	"runtime"
 	"strings"
 	"syscall"
@@ -11,7 +14,6 @@ import (
 
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
-	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -19,17 +21,6 @@ import (
 const version string = "0.9.11"
 
 func main() {
-
-	cntxt := &daemon.Context{
-		PidFileName: "pipfire.pid",
-		PidFilePerm: 0644,
-		LogFileName: "pipefire.log",
-		LogFilePerm: 0640,
-		WorkDir:     "./",
-		Umask:       027,
-		Args:        []string{"[go-daemon sample]"},
-	}
-	_ = cntxt
 
 	log.Infof("PipeFire Daemon Started. Version : %s ", version)
 
@@ -48,40 +39,65 @@ func main() {
 
 func executePipelines() {
 	// @todo shift this to the pipeline
-	hostConfig, err := config.ReadApplicationConfig("pipefired")
+	hostConfig, err := config.ReadApplicationConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
-			log.Println("Unable to find a configuration file")
+			log.Fatal("Unable to find a configuration file")
 		} else {
 			// Config file was found but another error was produced
-			log.Print("Encountered error: " + err.Error())
+			log.Fatal("Encountered error: " + err.Error())
 		}
 		os.Exit(1)
 	}
-	initLogging(hostConfig.LogLevel)
 
-	// @todo make this dynamic
-	ddConfig := hostConfig.Pipelines.DirectDebit
+	initLogging(hostConfig.GetString("loglevel"))
 
-	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(&ddConfig)
+	c := &config.HostConfig{}
+	err = hostConfig.Unmarshal(c)
 	if err != nil {
-		log.Error(err.Error())
-		os.Exit(1)
+		log.Fatal(err.Error())
 	}
 
-	for {
+	selectedConfig := hostConfig.ConfigFileUsed()
+	selectedDir := path.Dir(selectedConfig)
+	log.Infof("Using %s", selectedConfig)
 
-		log.Debugf("No of goroutines %d", runtime.NumGoroutine())
-		listenerError := make(chan error)
+	pipelineName := "directdebit"
+	if c.Pipelines[pipelineName] != "" {
+		file := c.Pipelines[pipelineName]
+		x := path.Join(selectedDir, file)
+		log.Infof("looking for %s", x)
+		jsonText, err := ioutil.ReadFile(x)
+		if err != nil {
+			log.Warningf("Unable to read file %s for pipeline %s", file, pipelineName)
+		}
 
-		go directDebitPipeline.StartListener(listenerError)
-		err := <-listenerError
+		ddConfig := &directdebit.PipelineConfig{}
+		if err := json.Unmarshal(jsonText, ddConfig); err != nil {
+			log.Fatal("Unable to load config for directdebit pipeline")
+		}
 
-		log.Warningf("RabbitMQ Reconnect Required: %s", err)
-		time.Sleep(2 * time.Second)
+		// create the dd pipeline
+		directDebitPipeline, err := directdebit.New(ddConfig)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
+		for {
+
+			log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+			listenerError := make(chan error)
+
+			go directDebitPipeline.StartListener(listenerError)
+			err := <-listenerError
+
+			log.Warningf("RabbitMQ Reconnect Required: %s", err)
+			time.Sleep(2 * time.Second)
+		}
 	}
+
 }
 
 func initLogging(lvl string) {
