@@ -26,7 +26,7 @@ type SftpConfig struct {
 }
 
 // get files from a particular endpoint
-func (p *ddPipeline) sftpGet(conf *SftpConfig) error {
+func (p ddPipeline) sftpGet(conf *SftpConfig) error {
 	p.log.Infof("Begin sftpGet: %s ", conf.Sftp.Host)
 	sftp, err := sftp.NewConnection("From", conf.Sftp, p.log)
 	if err != nil {
@@ -54,7 +54,7 @@ func (p *ddPipeline) sftpGet(conf *SftpConfig) error {
 }
 
 // sftpClean cleans the repote directory
-func (p *ddPipeline) sftpClean(conf *SftpConfig) (err error) {
+func (p ddPipeline) sftpClean(conf *SftpConfig) (err error) {
 	p.log.Infof("Begin sftpClean: %s", conf.Sftp.Host)
 	p.log.Debugf("Cleaning remote dir: %s ", conf.RemoteDir)
 
@@ -71,7 +71,7 @@ func (p *ddPipeline) sftpClean(conf *SftpConfig) (err error) {
 	return err
 }
 
-func (p *ddPipeline) sftpToSafe(conf *SftpConfig) (err error) {
+func (p ddPipeline) sftpToSafe(conf *SftpConfig) (err error) {
 
 	p.log.Infof("Begin sftpToSafe: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
@@ -109,7 +109,7 @@ func (p *ddPipeline) sftpToSafe(conf *SftpConfig) (err error) {
 }
 
 // send files to a particular endpoint
-func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
+func (p ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 	p.log.Infof("Begin sftpTo: %s", conf.Sftp.Host)
 	p.log.Debugf("Sftp transfer from %s to %s @ %s ", conf.LocalDir, conf.RemoteDir, conf.Sftp.Host)
 
@@ -129,10 +129,6 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 
 	dirList, _ := ioutil.ReadDir(conf.LocalDir)
 
-	if p.transferlog == nil || p.transferlog.Conn == nil {
-		return fmt.Errorf("Transfer log is unavailable, aborting")
-	}
-
 	// we want to examine each of these files to ensure they haven't been sent before
 	for _, file := range dirList {
 		cur := filepath.Join(conf.LocalDir, file.Name())
@@ -140,6 +136,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 		// create a synchronous transaction so that only 1 process can update the database at a time
 		tx := p.transferlog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelSerializable})
 
+		// i don't like this duplication
 		fileHash, err := hashFile(cur)
 		if err != nil {
 			return err
@@ -162,7 +159,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 			// attempt to transfer
 			confirmation, err := sftp.SendFile(cur, conf.RemoteDir)
 			if err != nil {
-				rec := &TransferRecord{
+				rec := &Record{
 					RemoteHost: conf.Sftp.Host,
 					// @todo see if this is populated TransferredFileHash: confirmation.TransferredHash,
 					TransferStart:  startTime,
@@ -180,7 +177,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 
 			if confirmation != nil {
 
-				rec := &TransferRecord{
+				rec := &Record{
 					RemoteFileName:      confirmation.RemoteFileName,
 					RemoteFilePath:      confirmation.RemotePath,
 					RemoteFileSize:      confirmation.RemoteSize,
@@ -212,7 +209,7 @@ func (p *ddPipeline) sftpTo(conf *SftpConfig) (err error) {
 	return nil
 }
 
-func (p *ddPipeline) recordFilesToSend(localDir string, remoteHost string) error {
+func (p ddPipeline) recordFilesToSend(localDir string, remoteHost string) error {
 	// @todo validate config
 
 	// Record the files in the database so we can
@@ -249,7 +246,7 @@ func (p *ddPipeline) recordFilesToSend(localDir string, remoteHost string) error
 		}
 
 		// add the record to the transferlog
-		record := &TransferRecord{
+		record := &Record{
 			LocalFileSize: file.Size(),
 			LocalFileName: file.Name(),
 			LocalFilePath: cur,

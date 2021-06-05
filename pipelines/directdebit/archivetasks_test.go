@@ -24,7 +24,7 @@ func TestArchiveFiles(t *testing.T) {
 		}
 	}
 
-	archiveConfig := &ArchiveConfig{
+	archiveConfig := ArchiveConfig{
 		Src:  src,
 		Dest: dest,
 	}
@@ -37,7 +37,7 @@ func TestArchiveFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = pipeline.archiveTransferred(archiveConfig)
+	err = pipeline.archiveTransferred(&archiveConfig)
 	if err != nil {
 		t.Error(err)
 	}
@@ -68,7 +68,7 @@ func TestArchiveDir(t *testing.T) {
 		}
 	}
 
-	archiveConfig := &ArchiveConfig{
+	archiveConfig := ArchiveConfig{
 		Src:  src,
 		Dest: dest,
 	}
@@ -81,7 +81,7 @@ func TestArchiveDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = pipeline.archiveTransferred(archiveConfig)
+	err = pipeline.archiveTransferred(&archiveConfig)
 	if err != nil {
 		t.Error(err)
 	}
