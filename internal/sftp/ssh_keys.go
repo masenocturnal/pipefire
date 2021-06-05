@@ -28,7 +28,7 @@ func getPrivateKeyAuthentication(keyPath string, keyPassword string) (ssh.AuthMe
 		signer, err = ssh.ParsePrivateKey(keyInBytes)
 	}
 	if err != nil {
-		e := fmt.Errorf("Unable to decrypt private key. You may need to supply a decryption password %s", err.Error())
+		e := fmt.Errorf("Unable to decrypt private key. This could be because it is a new openssh-v1 encrypted key which is not currently supported. %s", err.Error())
 		return nil, e
 	}
 	return ssh.PublicKeys(signer), err

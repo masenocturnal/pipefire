@@ -2,6 +2,113 @@
     "loglevel": "debug",
     "background": "true",
     "pipelines": {
-        "directdebit": "directdebit.json"
+        "directdebit": {
+            "database": {
+                "user": "pipefire",
+                "net": "tcp",
+                "addr": "localhost:3306",
+                "passwd": "foobar123",
+                "dbname": "pipefire",
+                "allowNativePasswords": true
+            },
+            "transferLog": {
+                "table": "FileTransfers"
+            },
+            "tasks": {
+                "getFilesFromBFP": {
+                    "remoteDir": "./Pickup",
+                    "localDir": "/tmp/ddrun/Pickup",
+                    "sftp": {
+                        "host": "172.20.1.3",
+                        "key": "~/.ssh/id_rsa",
+                        "username": "test",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": true
+                },
+                "cleanBFP": {
+                    "remoteDir": "./Pickup",
+                    "localDir": "",
+                    "sftp": {
+                        "host": "172.20.1.3",
+                        "key": "/home/sysam/.ssh/bfp_rsa.pem",
+                        "username": "test",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": false
+                },
+                "encryptFiles": {
+                    "srcDir": "/tmp/ddrun/Pickup/",
+                    "outputDir": "/tmp/ddrun/Encrypted",
+                    "providers": {
+                        "anz": {
+                            "encryptionKey": "/home/andmas/keys/public/anz.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": "",                            
+                            "srcDir": "GA",
+                            "destDir": "GA",
+                            "enabled": true
+                        },
+                        "px": {
+                            "encryptionKey": "/home/andmas/keys/public/px.pub",
+                            "fingerprint": "",
+                            "signingKey": "",
+                            "signingKeyPassword": "",
+                            "encryptionKeyPassword": "",
+                            "decryptionKey": "",
+                            "srcDir": "PX",
+                            "destDir": "PX",
+                            "enabled": true
+                        }        
+                    },
+                    "enabled": true
+                },                
+                "sftpFilesToANZ": {
+                    "localDir": "/tmp/ddrun/Encrypted/ANZ",
+                    "remoteDir": "./Out/Certegy/DE/",
+                    "sftp": {
+                        "host": "localhost",
+                        "key": "",
+                        "username": "test",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 3389
+                    },
+                    "enabled": false
+                },
+                "sftpFilesToPx": {
+                    "localDir": "/tmp/ddrun/Encrypted/PX",
+                    "remoteDir": "./In",
+                    "sftp": {
+                        "host": "",
+                        "key": "",
+                        "username": "ubuntu",
+                        "password": "",
+                        "keyPassword": "",
+                        "port": 22
+                    },
+                    "enabled": false
+                },                
+                "archiveTransferred": {
+                    "src": "/tmp/ddrun/Encrypted",
+                    "dest": "/tmp/send_files/",
+                    "enabled": true
+                },
+                "cleanDirtyFiles": {
+                    "paths": [
+                        "/tmp/ddrun/Pickup/",
+                        "/tmp/ddrun/Encrypted"
+                    ],
+                    "enabled": true
+                }
+            }
+        }
     }
 }

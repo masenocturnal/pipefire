@@ -25,7 +25,7 @@ type Endpoint struct {
 	UserName    string `json:"username"`
 	Password    string `json:"password"`
 	KeyPassword string `json:"keyPassword"`
-	Port        int64  `json:"port"`
+	Port        string `json:"port"`
 }
 
 //FileTransferConfirmation is a summmary of the transferred file
@@ -103,12 +103,12 @@ func NewConnection(name string, conf Endpoint, log *log.Entry) (Transport, error
 	if conf.Host == "" {
 		return transport, fmt.Errorf("Host has not been set for %s", name)
 	}
-	if conf.Port == 0 {
+	if conf.Port == "" {
 		log.Println("Port not set, using 22")
-		conf.Port = 22
+		conf.Port = "22"
 	}
 
-	connectionString := fmt.Sprintf("%s:%d", conf.Host, conf.Port)
+	connectionString := conf.Host + ":" + conf.Port
 	log.Infof("Attempting to connect to %s ", connectionString)
 
 	// connect
