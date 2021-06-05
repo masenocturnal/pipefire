@@ -1,41 +1,43 @@
 package config
 
 import (
-	"github.com/masenocturnal/pipefire/pipelines/directdebit"
 	"github.com/spf13/viper"
 )
 
-// @todo load dynamically
-
-//Pipelines top level =pipeline configuration
-type Pipelines struct {
-	DirectDebit directdebit.Config `json:"directdebit"`
-}
-
 // HostConfig data structure that represent a valid configuration file
 type HostConfig struct {
-	LogLevel   string    `json:"loglevel"`
-	Background bool      `json:"background"`
-	Pipelines  Pipelines `json:"piplines"`
-	// Sftp       map[string]sftp.Endpoint         `json:"sftp"`
-	// Crypto     map[string]crypto.ProviderConfig `json:"crypto"`
+	LogLevel   string            `json:"loglevel"`
+	Background bool              `json:"background"`
+	Pipelines  map[string]string `json:"pipelines"`
 }
+type includeFile string
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment
-func ReadApplicationConfig(configName string) (*HostConfig, error) {
+func ReadApplicationConfig(paths ...string) (*viper.Viper, error) {
 
-	// conf := micro.NewConfig()
 	conf := viper.New()
-	conf.SetConfigName(configName)
-	conf.AddConfigPath("/etc/pipefire/")
-	conf.AddConfigPath("../config/")
-	conf.AddConfigPath("./")
+	conf.SetConfigName("pipefired")
+	//conf.Set("Verbose", true)
+	if len(paths) > 0 {
+		for _, path := range paths {
+			conf.AddConfigPath(path)
+		}
+	} else {
+		conf.AddConfigPath("/etc/pipefire/")
+		conf.AddConfigPath("../config/")
+		conf.AddConfigPath("./")
+	}
 	conf.AutomaticEnv()
 
 	err := conf.ReadInConfig()
-	hostConfig := &HostConfig{}
-	conf.Unmarshal(hostConfig)
+
+	if err != nil {
+		return nil, err
+	}
+	// hostConfig := &HostConfig{}
+	// err = conf.Unmarshal(hostConfig)
+	// conf.Debug()
 
 	// @todo validation
-	return hostConfig, err
+	return conf, err
 }

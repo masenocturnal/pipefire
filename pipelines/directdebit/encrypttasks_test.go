@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/masenocturnal/pipefire/internal/crypto"
-	log "github.com/sirupsen/logrus"
 )
 
 // func TestGPGCLIEncryptFiles(t *testing.T) {
@@ -46,14 +45,13 @@ func TestOpenGPGEncryptionPX(t *testing.T) {
 	}
 
 	tasksConfig := &TasksConfig{
-		EncryptFiles: *encryptConfig,
+		EncryptFiles: encryptConfig,
 	}
-	logEntry := log.WithField("test", "test")
 
-	ddConfig := &Config{}
-	ddConfig.Tasks = *tasksConfig
+	ddConfig := &PipelineConfig{}
+	ddConfig.Tasks = tasksConfig
 
-	pipeline, err := New(ddConfig, logEntry)
+	pipeline, err := New(ddConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

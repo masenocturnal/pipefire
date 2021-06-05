@@ -1,85 +1,103 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"os"
+	"os/signal"
+	"path"
+	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
-	uuid "github.com/google/uuid"
 	"github.com/masenocturnal/pipefire/internal/config"
 	"github.com/masenocturnal/pipefire/pipelines/directdebit"
-	"github.com/sevlyar/go-daemon"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.9"
+const version string = "0.9.11"
 
 func main() {
 
-	cntxt := &daemon.Context{
-		PidFileName: "pipfire.pid",
-		PidFilePerm: 0644,
-		LogFileName: "pipefire.log",
-		LogFilePerm: 0640,
-		WorkDir:     "./",
-		Umask:       027,
-		Args:        []string{"[go-daemon sample]"},
-	}
-	_ = cntxt
-
-	// d, err := cntxt.Reborn()
-	// if err != nil {
-	// 	log.Fatal("Unable to run: ", err)
-	// }
-	// if d != nil {
-	// 	return
-	// }
-	// defer cntxt.Release()
-
 	log.Infof("PipeFire Daemon Started. Version : %s ", version)
-	hostConfig, err := config.ReadApplicationConfig("pipefired")
 
+	// create the channel to handle the OS Signal
+	signalChannel := make(chan os.Signal, 1)
+
+	// ask to be notified of signals. @todo we actually need to deal with this differently
+	signal.Notify(signalChannel, os.Interrupt, syscall.SIGKILL, syscall.SIGTERM, syscall.SIGHUP)
+	go executePipelines()
+	<-signalChannel
+	fmt.Println("Pipefire Shutting Down")
+	//
+	os.Exit(0)
+
+}
+
+func executePipelines() {
+	// @todo shift this to the pipeline
+	hostConfig, err := config.ReadApplicationConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
-			log.Println("Unable to find a configuration file")
+			log.Fatal("Unable to find a configuration file")
 		} else {
 			// Config file was found but another error was produced
-			log.Print("Encountered error: " + err.Error())
+			log.Fatal("Encountered error: " + err.Error())
 		}
 		os.Exit(1)
 	}
-	initLogging(hostConfig.LogLevel)
-	correlationID := uuid.New()
 
-	logEntry := log.WithFields(log.Fields{
-		"correlationId": correlationID,
-	})
+	initLogging(hostConfig.GetString("loglevel"))
 
-	// @todo make this dynamic
-	ddConfig := hostConfig.Pipelines.DirectDebit
-
-	// create the dd pipeline
-	directDebitPipeline, err := directdebit.New(&ddConfig, logEntry)
+	c := &config.HostConfig{}
+	err = hostConfig.Unmarshal(c)
 	if err != nil {
-		log.Error(err.Error())
-		os.Exit(1)
+		log.Fatal(err.Error())
 	}
-	defer directDebitPipeline.Close()
 
-	// @todo load and execute pipelines concurrently
-	// execute pipeline
-	pipelineErrors := directDebitPipeline.Execute(correlationID.String())
+	selectedConfig := hostConfig.ConfigFileUsed()
+	selectedDir := path.Dir(selectedConfig)
+	log.Infof("Using %s", selectedConfig)
 
-	// err = executePipelines(conf)
-	if pipelineErrors != nil && len(pipelineErrors) > 0 {
-		for _, err := range pipelineErrors {
-			log.Error(err.Error())
+	pipelineName := "directdebit"
+	if c.Pipelines[pipelineName] != "" {
+		file := c.Pipelines[pipelineName]
+		x := path.Join(selectedDir, file)
+		log.Infof("looking for %s", x)
+		jsonText, err := ioutil.ReadFile(x)
+		if err != nil {
+			log.Warningf("Unable to read file %s for pipeline %s", file, pipelineName)
 		}
-		log.Info("Direct Debit Pipeline Complete with Errors")
-	} else {
-		log.Info("Direct Debit Pipeline Complete")
+
+		ddConfig := &directdebit.PipelineConfig{}
+		if err := json.Unmarshal(jsonText, ddConfig); err != nil {
+			log.Fatal("Unable to load config for directdebit pipeline")
+		}
+
+		// create the dd pipeline
+		directDebitPipeline, err := directdebit.New(ddConfig)
+		if err != nil {
+			log.Error(err.Error())
+			os.Exit(1)
+		}
+
+		for {
+
+			log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+			listenerError := make(chan error)
+
+			go directDebitPipeline.StartListener(listenerError)
+			err := <-listenerError
+
+			log.Warningf("RabbitMQ Reconnect Required: %s", err)
+			time.Sleep(2 * time.Second)
+		}
 	}
+
 }
 
 func initLogging(lvl string) {
@@ -91,6 +109,9 @@ func initLogging(lvl string) {
 	lvl = strings.ToLower(lvl)
 
 	switch lvl {
+	case "trace":
+		log.SetLevel(log.TraceLevel)
+		break
 	case "debug":
 		log.SetLevel(log.DebugLevel)
 		break

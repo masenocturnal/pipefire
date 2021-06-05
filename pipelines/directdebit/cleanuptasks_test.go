@@ -28,7 +28,7 @@ func TestCleanup(t *testing.T) {
 		}
 	}
 
-	cleanUpConfig := CleanUpConfig{
+	cleanUpConfig := &CleanUpConfig{
 		Paths: paths,
 	}
 
@@ -40,7 +40,7 @@ func TestCleanup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	errs := pipeline.cleanDirtyFiles(&cleanUpConfig)
+	errs := pipeline.cleanDirtyFiles(cleanUpConfig)
 	if len(errs) > 0 {
 		t.Error(err)
 	}
