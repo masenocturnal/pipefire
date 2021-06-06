@@ -295,7 +295,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 
 	if !r.IsDir() {
 		// remote end is a file...but we have a local directory
-		// to stash it im, so let's just make it work
+		// to stash it in, so let's just make it work
 		confirmation, err := c.GetFile(remoteDir, localDir)
 		if err != nil {
 			errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))

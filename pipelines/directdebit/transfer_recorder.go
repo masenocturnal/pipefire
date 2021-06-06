@@ -108,7 +108,7 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 
 	//tr := &TransferRecord{}
 	// er := &EncryptionRecord{}
-
+	t.log.Debugf("Checking that localfile %s has not already been sent to %s", hash, remoteHost)
 	sql := `
 	SELECT 
 		er.local_file_hash as plaintext_file_hash
@@ -140,7 +140,11 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 	}
 	defer rows.Close()
 
-	rows.Next()
+	// if there are no more rows then the above query hasn't returned any rows
+	// the most common scenario is where the plaintext file hasn't been encrypted
+	if !(rows.Next()) {
+		return false, fmt.Errorf("Local file %s is not eligible to send to %s. This likely means it hasn't been encrypted", hash, remoteHost)
+	}
 
 	var row AvailableToSend
 	err = rows.Scan(
@@ -164,6 +168,7 @@ func (t TransferLog) FileAlreadySent(txn *gorm.DB, hash string, remoteHost strin
 	}
 
 	// File has NOT been sent before
+	t.log.Infof("Localfile %s has not already been sent to %s", hash, remoteHost)
 	return false, err
 }
 

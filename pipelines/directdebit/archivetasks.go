@@ -78,7 +78,7 @@ func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []erro
 	}
 
 	// Create and add some files to the archive.
-	archiveName := filepath.Join(destDir, time.Now().Format("2006-01-02")+".tar")
+	archiveName := filepath.Join(destDir, time.Now().Format("2006-01-020700")+".tar")
 
 	f, err := os.Create(archiveName)
 	if err != nil {
