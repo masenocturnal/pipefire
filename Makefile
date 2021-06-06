@@ -3,7 +3,7 @@ build:
 build-release:
 	go build -race -ldflags="-s -w" ./cmd/pipefired.go
 run:
-	go run -race ./cmd/pipefired.go
+	cd cmd; go run -race ./pipefired.go
 clean:
 	rm -rf ./pipefired
 
