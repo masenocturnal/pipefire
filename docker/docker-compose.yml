@@ -54,7 +54,7 @@ services:
       app_net:
         ipv4_address: 172.20.1.5
   rabbitmq:
-    image: rabbitmq:3.8.2-rc.1-management
+    image: rabbitmq:3.8
     ports:
       - "5672:5672"
       - "5671:5671"

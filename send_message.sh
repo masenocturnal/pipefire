@@ -1,6 +1,6 @@
 #!/bin/bash
 
-vhost="banking"
+vhost=""
 exchange="BankFileTransfer.Incoming"
 uuid=`uuidgen`
 currDate=`date -I`

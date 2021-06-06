@@ -12,15 +12,15 @@
 		"password": "guest",
 		"host": "172.20.1.6",
 		"port": "5672",
-		"vhost": "banking",
+		"vhost": "",
 		"exchanges": [{
 				"name": "BankFileTransfer.Incoming",
-				"exchangeType": "fanout",
+				"exchangeType": "direct",
 				"durable": true
 			},
 			{
 				"name": "BankFileTransfer.Incoming_error",
-				"exchangeType": "fanout",
+				"exchangeType": "direct",
 				"durable": true
 			}
 		],
@@ -101,10 +101,10 @@
 					"decryptionKey": "",
 					"srcDir": "PX",
 					"destDir": "PX",
-					"enabled": true
+					"enabled": false
 				}
 			},
-			"enabled": false
+			"enabled": true
 		},
 		"sftpFilesToANZ": {
 			"localDir": "/tmp/ddrun/Encrypted/ANZ",
@@ -114,7 +114,7 @@
 				"key": "~/.ssh/id_rsa",
 				"username": "test",
 				"password": "",
-				"keyPassword": "1loverhia",
+				"keyPassword": "",
 				"port": 22
 			},
 			"enabled": true
@@ -127,15 +127,15 @@
 				"key": "~/.ssh/id_rsa",
 				"username": "test",
 				"password": "",
-				"keyPassword": "1loverhia",
+				"keyPassword": "",
 				"port": 22
 			},
-			"enabled": true
+			"enabled": false
 		},
 		"archiveTransferred": {
 			"src": "/tmp/ddrun/Encrypted",
-			"dest": "/tmp/send_files/",
-			"enabled": false
+			"dest": "/tmp/archive_sent_files/",
+			"enabled": true
 		},
 		"cleanDirtyFiles": {
 			"paths": [
