@@ -1,42 +1,37 @@
-package directdebit
+package main
 
-import (
-	"path/filepath"
-	"testing"
+// func getPipeline(tasksConfig *config.TasksConfig) (*ddPipeline, error) {
+// 	// logEntry := log.WithField("test", "test")
 
-	"github.com/masenocturnal/pipefire/internal/config"
-)
+// 	ddConfig := &config.PipelineConfig{}
+// 	ddConfig.Tasks = make([]*config.TasksConfig, 1)
+// 	ddConfig.Tasks[0] = tasksConfig
 
-func getPipeline(tasksConfig *TasksConfig) (Pipeline, error) {
-	// logEntry := log.WithField("test", "test")
+// 	pipeline, err := New(ddConfig)
 
-	ddConfig := &PipelineConfig{}
-	ddConfig.Tasks = tasksConfig
+// 	return pipeline, err
+// }
 
-	pipeline, err := New(ddConfig)
+// var configPath string = "../../config/"
 
-	return pipeline, err
-}
+// func setup(t *testing.T) (*config.PipelineConfig, error) {
+// 	abs, err := filepath.Abs(configPath)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-var configPath string = "../../config/"
+// 	hostConfig, err := config.ReadApplicationConfig(abs)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-func setup(t *testing.T) (*PipelineConfig, error) {
-	abs, err := filepath.Abs(configPath)
-	if err != nil {
-		return nil, err
-	}
+// 	ddConfig := &config.PipelineConfig{}
+// 	ddConfig.Tasks = make([]*config.TasksConfig, 1)
 
-	hostConfig, err := config.ReadApplicationConfig(abs)
-	if err != nil {
-		return nil, err
-	}
-
-	ddConfig := &PipelineConfig{}
-
-	// @todo make this dynamic
-	err = hostConfig.UnmarshalKey("pipelines.directdebit", ddConfig)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-	return ddConfig, nil
-}
+// 	// @todo make this dynamic
+// 	err = hostConfig.UnmarshalKey("pipelines.directdebit", ddConfig)
+// 	if err != nil {
+// 		t.Fatal(err.Error())
+// 	}
+// 	return ddConfig, nil
+// }

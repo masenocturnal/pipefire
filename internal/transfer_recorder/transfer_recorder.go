@@ -1,4 +1,4 @@
-package directdebit
+package transfer_recorder
 
 import (
 	"fmt"

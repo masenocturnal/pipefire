@@ -1,8 +1,10 @@
-package directdebit
+package archive
 
 import (
 	"io/ioutil"
 	"testing"
+
+	"github.com/sirupsen/logrus"
 )
 
 func TestArchiveFiles(t *testing.T) {
@@ -29,15 +31,15 @@ func TestArchiveFiles(t *testing.T) {
 		Dest: dest,
 	}
 
-	tasksConfig := &TasksConfig{
-		ArchiveTransferred: archiveConfig,
-	}
-	pipeline, err := getPipeline(tasksConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// tasksConfig := &TasksConfig{
+	// 	ArchiveTransferred: archiveConfig,
+	// }
+	// pipeline, err := getPipeline(tasksConfig)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	err = pipeline.archiveTransferred(archiveConfig)
+	err = ArchiveTransferred(archiveConfig, logrus.Entry{})
 	if err != nil {
 		t.Error(err)
 	}
@@ -73,15 +75,15 @@ func TestArchiveDir(t *testing.T) {
 		Dest: dest,
 	}
 
-	tasksConfig := &TasksConfig{
-		ArchiveTransferred: archiveConfig,
-	}
-	pipeline, err := getPipeline(tasksConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// tasksConfig := &TasksConfig{
+	// 	ArchiveTransferred: archiveConfig,
+	// }
+	// pipeline, err := getPipeline(tasksConfig)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	err = pipeline.archiveTransferred(archiveConfig)
+	err = ArchiveTransferred(archiveConfig, logrus.Entry{})
 	if err != nil {
 		t.Error(err)
 	}

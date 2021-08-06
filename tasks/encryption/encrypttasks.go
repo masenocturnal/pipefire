@@ -1,8 +1,9 @@
-package directdebit
+package encryption
 
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,21 +12,25 @@ import (
 	"path/filepath"
 	"strings"
 
-	mysql "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 	"github.com/masenocturnal/pipefire/internal/crypto"
+	"github.com/masenocturnal/pipefire/internal/encryption_recorder"
+	"github.com/sirupsen/logrus"
 )
 
-// EncryptFilesConfig is the configuration requriements for the encryptFiles task
-type EncryptFilesConfig struct {
-	SrcDir    string                           `json:"srcDir"`
-	OutputDir string                           `json:"outputDir"`
-	Providers map[string]crypto.ProviderConfig `json:"providers"`
-	Enabled   bool                             `json:"enabled"`
+//GetConfig for a an appropriately shaped json configuration string return a valid ArchiveConfig
+func GetConfig(jsonText string) (*crypto.EncryptFilesConfig, error) {
+	config := &crypto.EncryptFilesConfig{}
+
+	err := json.Unmarshal([]byte(jsonText), config)
+
+	return config, err
+
 }
 
-func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir string, outputDir string) (errList []error) {
-	p.log.Infof("Attempting to Encrypt files in %s using the CLI", srcDir)
-	//gpg2 -u "Certegy BNZ (FTG-PROD)" -r "BNZConnect (FTG-PROD)" --openpgp --sign --output "./BNZ_SEND/${fileName}.gpg"  --encrypt "$fileName"
+func PGPCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir string, outputDir string, l *logrus.Entry) (errList []error) {
+
+	l.Infof("Attempting to Encrypt files in %s using the CLI", srcDir)
 
 	files, err := ioutil.ReadDir(srcDir)
 
@@ -63,44 +68,45 @@ func (p ddPipeline) pgpCLIEncryptFilesInDir(config crypto.ProviderConfig, srcDir
 			"--encrypt",
 			srcFile,
 		}
-		p.log.Info(strings.Join(args, " "))
+		l.Info(strings.Join(args, " "))
 		if cmdOut, err = exec.Command(cmd, args...).Output(); err != nil {
 			x := err.(*exec.ExitError)
 
-			p.log.Warn("Ensure that the GPG key is trusted otherwise you may encounter an assurance error")
-			p.log.Errorf("Error executing command: %s Error: %s", cmd, err.Error())
-			p.log.Errorf("Error: %s", x.Stderr)
+			l.Warn("Ensure that the GPG key is trusted otherwise you may encounter an assurance error")
+			l.Errorf("Error executing command: %s Error: %s", cmd, err.Error())
+			l.Errorf("Error: %s", x.Stderr)
 
 			return append(errList, err)
 		}
 		out := string(cmdOut)
-		p.log.Debug(out)
+		l.Debug(out)
 
 		if err != nil {
-			p.log.Errorf("Unable to execute GPG task %s ", err.Error())
+			l.Errorf("Unable to execute GPG task %s ", err.Error())
 			return append(errList, err)
 		}
 	}
 
-	p.log.Debug("PGP Encryption Task Complete")
+	l.Debug("PGP Encryption Task Complete")
 	return
 }
 
-func (p ddPipeline) pgpEncryptFilesForBank(config *EncryptFilesConfig) (errList []error) {
-	p.log.Infof("Attempting to Encrypt files in %s", config.SrcDir)
+func PGPEncryptFilesForTransfer(config *crypto.EncryptFilesConfig, encryptionLog *encryption_recorder.EncryptionLog, correlationID string, l *logrus.Entry) (errList []error) {
+
+	l.Infof("Attempting to Encrypt files in %s", config.SrcDir)
 
 	for bank, providerConfig := range config.Providers {
 
 		if providerConfig.Enabled {
 			// Create the crypto provider
-			encryptionProvider := crypto.NewProvider(providerConfig, p.log)
+			encryptionProvider := crypto.NewProvider(providerConfig, l)
 			srcDir := filepath.Join(config.SrcDir, providerConfig.SrcDir)
 
 			outputDir := filepath.Join(config.OutputDir, providerConfig.DestDir)
-			p.log.Debugf("Encrypting all files in located in %s to %s ", srcDir, outputDir)
+			l.Debugf("Encrypting all files in located in %s to %s ", srcDir, outputDir)
 
 			// encrypt files
-			err := p.encryptFilesInDir(encryptionProvider, srcDir, outputDir)
+			err := encryptFilesInDir(encryptionProvider, srcDir, outputDir, encryptionLog, correlationID, l)
 
 			if err != nil {
 				for _, e := range err {
@@ -108,16 +114,16 @@ func (p ddPipeline) pgpEncryptFilesForBank(config *EncryptFilesConfig) (errList 
 				}
 			}
 		} else {
-			p.log.Warnf("Skipping Encryption for %s ", bank)
+			l.Warnf("Skipping Encryption for %s ", bank)
 		}
 	}
 
-	p.log.Debug("Encryption Task Complete")
+	l.Debug("Encryption Task Complete")
 	return
 }
 
 //encryptFilesInDir encrypt all the files in the directory with the given provider
-func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir string, outputDir string) (errorList []error) {
+func encryptFilesInDir(cryptoProvider crypto.Provider, srcDir string, outputDir string, encryptionLog *encryption_recorder.EncryptionLog, correlationID string, l *logrus.Entry) (errorList []error) {
 	fileList, err := ioutil.ReadDir(srcDir)
 	if err != nil {
 		return append(errorList, err)
@@ -140,25 +146,25 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 				// skip this file
 				break
 			}
-			txn := p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+			txn := encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 
 			// record file
-			record := &EncryptionRecord{
+			record := &encryption_recorder.EncryptionRecord{
 				LocalFileName: plainText,
 				LocalFilePath: plainText,
 				LocalFileSize: fileToEncrypt.Size(),
 				LocalFileHash: hash,
-				CorrelationID: p.correlationID,
+				CorrelationID: correlationID,
 			}
 
-			err = p.encryptionLog.Create(txn, record)
+			err = encryptionLog.Create(txn, record)
 			if err != nil {
-				p.log.Errorf("Unable to create encryption record for %s ", plainText)
-				p.log.Debugf("Creating error %s ", err.Error())
+				l.Errorf("Unable to create encryption record for %s ", plainText)
+				l.Debugf("Creating error %s ", err.Error())
 				// try cast to mysql error
 				dbErr := err.(*mysql.MySQLError)
 				if dbErr != nil && dbErr.Number == 1062 {
-					p.log.Warningf("File %s with hash %s has been processed before", plainText, hash)
+					l.Warningf("File %s with hash %s has been processed before", plainText, hash)
 					txn.Rollback()
 					continue
 				} else {
@@ -172,18 +178,18 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 				txn.RollbackUnlessCommitted()
 			}
 
-			txn = p.encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+			txn = encryptionLog.Conn.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 
 			// encrypt file
 			err = cryptoProvider.EncryptFile(plainText, cryptFile)
 			if err != nil {
-				p.log.Warningf("Error encrypting file %s : %s", plainText, err.Error())
+				l.Warningf("Error encrypting file %s : %s", plainText, err.Error())
 				errorList = append(errorList, err)
 				txn.Rollback()
 				continue
 			}
 
-			record.EncryptedFileHash, _ = hashFile(cryptFile)
+			record.EncryptedFileHash, _ = crypto.HashFile(cryptFile)
 
 			// get the encryption key
 			recipientKey, err := cryptoProvider.GetEncryptionKey()
@@ -207,7 +213,7 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 				}
 			}
 
-			err = p.encryptionLog.Update(txn, record)
+			err = encryptionLog.Update(txn, record)
 			if err != nil {
 				errorList = append(errorList, err)
 				txn.Rollback()
@@ -221,7 +227,7 @@ func (p ddPipeline) encryptFilesInDir(cryptoProvider crypto.Provider, srcDir str
 			}
 		}
 	} else {
-		p.log.Warnf("No files to encrypt in %s", srcDir)
+		l.Warnf("No files to encrypt in %s", srcDir)
 	}
 	return
 }

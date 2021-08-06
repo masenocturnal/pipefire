@@ -1,114 +1,87 @@
-package directdebit
+package main
 
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
+	"github.com/masenocturnal/pipefire/internal/config"
+	"github.com/masenocturnal/pipefire/internal/db"
+	"github.com/masenocturnal/pipefire/internal/encryption_recorder"
+	"github.com/masenocturnal/pipefire/internal/mq"
+	"github.com/masenocturnal/pipefire/internal/transfer_recorder"
 
-	mysql "github.com/go-sql-driver/mysql"
-	"github.com/jinzhu/gorm"
+	"github.com/masenocturnal/pipefire/tasks/archive"
+	"github.com/masenocturnal/pipefire/tasks/cleanup"
+	"github.com/masenocturnal/pipefire/tasks/encryption"
+	sftpTask "github.com/masenocturnal/pipefire/tasks/sftp"
+
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
-// Pipeline is an implementation of a pipeline
-type Pipeline interface {
-	StartListener(listenerError chan error)
-	Execute(string) []error
-	Close() error
-	sftpGet(conf *SftpConfig) error                          // @todo this shouldn't be part of the generic interface
-	sftpTo(conf *SftpConfig) error                           // @todo this shouldn't be part of the generic interface
-	archiveTransferred(conf *ArchiveConfig) error            // @todo this shouldn't be part of the generic interface
-	cleanDirtyFiles(conf *CleanUpConfig) []error             // @todo this shouldn't be part of the generic interface
-	pgpEncryptFilesForBank(conf *EncryptFilesConfig) []error // @todo this shouldn't be part of the generic interface
+//TransferFilesPayload represents the payload received from the message bus
+type TransferFilesPayload struct {
+	MessageType []string
+	Message     MessagePayload
 }
 
-//TasksConfig Configuration
-type TasksConfig struct {
-	GetFilesFromBFP    *SftpConfig         `json:"getFilesFromBFP"`
-	CleanBFP           *SftpConfig         `json:"cleanBFP"`
-	EncryptFiles       *EncryptFilesConfig `json:"encryptFiles"`
-	SftpFilesToANZ     *SftpConfig         `json:"sftpFilesToANZ"`
-	SftpFilesToPx      *SftpConfig         `json:"sftpFilesToPx"`
-	SftpFilesToBNZ     *SftpConfig         `json:"sftpFilesToBNZ"`
-	ArchiveTransferred *ArchiveConfig      `json:"archiveTransferred"`
-	CleanDirtyFiles    *CleanUpConfig
+//MessagePayload represents the message content in a TransferFilesPayload from the message bus
+type MessagePayload struct {
+	Task          string `json:"task"`
+	StartDate     string `json:"start_date"`
+	CorrelationID string `json:"correlationId"`
 }
 
-// PipelineConfig defines the required arguements for the pipeline
-type PipelineConfig struct {
-	Database mysql.Config
-	Rabbitmq *BusConfig
-	Tasks    *TasksConfig
+type CustomPipeline struct {
+	Log            *log.Entry
+	correlationID  string
+	consumer       *mq.MessageConsumer
+	pipelineConfig *config.PipelineConfig
 }
 
-type ddPipeline struct {
-	log           *log.Entry
-	correlationID string
-	consumer      *MessageConsumer
-	transferlog   *TransferLog
-	encryptionLog *EncryptionLog
-	taskConfig    *PipelineConfig
+const version string = "0.0.1"
+
+var transferLog *transfer_recorder.TransferLog
+var encryptionLog *encryption_recorder.EncryptionLog
+var consumer *mq.MessageConsumer
+
+func GetVersion() string {
+	return version
 }
 
 // New Pipeline
-func New(c *PipelineConfig) (Pipeline, error) {
+func New(c *config.PipelineConfig) (interface{}, error) {
 
 	log := log.WithField("Pipeline", "DirectDebit")
 
-	var p *ddPipeline = &ddPipeline{
-		taskConfig: c,
-		log:        log,
+	p := &CustomPipeline{
+		pipelineConfig: c,
+		Log:            log,
 	}
 
 	if c.Database.Addr != "" {
-		db, err := connectToDb(c.Database)
+		db, err := db.ConnectToDb(c.Database)
 		if err != nil {
 			return nil, err
 		}
-		db.SetLogger(p.log)
+		db.SetLogger(p.Log)
 		db.LogMode(true)
-		p.transferlog = NewTransferRecorder(db, p.log)
-		p.encryptionLog = NewEncryptionRecorder(db, p.log)
+		transferLog = transfer_recorder.NewTransferRecorder(db, p.Log)
+		encryptionLog = encryption_recorder.NewEncryptionRecorder(db, p.Log)
 	}
 
 	if c.Rabbitmq.Host != "" {
-		p.consumer = NewConsumer(c.Rabbitmq, p.log)
+		consumer = mq.NewConsumer(c.Rabbitmq, p.Log)
 	}
 
 	return p, nil
 }
 
-func connectToDb(dbConfig mysql.Config) (*gorm.DB, error) {
+func (p *CustomPipeline) StartListener(listenerError chan error) {
 
-	dbConfig.ParseTime = true
-
-	redact := func(r rune) rune {
-		return '*'
-	}
-
-	redactedPw := strings.Map(redact, dbConfig.Passwd)
-
-	log.Debugf("Connection String (pw redacted): %s:%s@/%s", dbConfig.User, redactedPw, dbConfig.Addr)
-
-	// if err := mysql.SetLogger(p.log); err != nil {
-	// 	return nil, err
-	// }
-
-	// if config.Database {
-	connectionString := dbConfig.FormatDSN()
-	db, err := gorm.Open("mysql", connectionString)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to connect to the database: %s", err.Error())
-	}
-	return db, err
-}
-
-func (p *ddPipeline) StartListener(listenerError chan error) {
-
-	conn, err := p.consumer.Connect()
+	conn, err := consumer.Connect()
 	if err != nil {
 		listenerError <- err
 		// goroutine will block forever if we don't return
@@ -125,10 +98,10 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 	rabbitCloseError := make(chan *amqp.Error)
 	conn.NotifyClose(rabbitCloseError)
 
-	p.log.Debug("Creating Channel")
+	p.Log.Debug("Creating Channel")
 	consumerCh, err := conn.Channel()
 	if err != nil {
-		p.log.Errorf("Unable to create Channel : %s ", err.Error())
+		p.Log.Errorf("Unable to create Channel : %s ", err.Error())
 		listenerError <- err
 		close(rabbitCloseError)
 
@@ -136,16 +109,16 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 		return
 	}
 
-	p.log.Debug("Creating Exchanges and Queues")
+	p.Log.Debug("Creating Exchanges and Queues")
 	// Setup the Exchanges and the Queues
-	if err := p.consumer.Configure(consumerCh); err != nil {
+	if err := consumer.Configure(consumerCh); err != nil {
 		listenerError <- err
 		return
 	}
 
-	p.log.Info("Opening Consumer Channel")
+	p.Log.Info("Opening Consumer Channel")
 	firehose, err := consumerCh.Consume(
-		p.consumer.config.Queues[0].Name,
+		consumer.Config.Queues[0].Name,
 		"pipefire",
 		false,
 		false,
@@ -169,10 +142,10 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				_ = conn.Close()
 			}
 			_ = consumerCh.Cancel("pipefire", false)
-			p.log.Warning("RabbitMQ Connection has gone away")
+			p.Log.Warning("RabbitMQ Connection has gone away")
 			listenerError <- err
 
-			p.log.Info("Shutting Down Listener")
+			p.Log.Info("Shutting Down Listener")
 			return
 		case msg := <-firehose:
 
@@ -180,13 +153,13 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 				break
 			}
 
-			p.log.Debugf("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
+			p.Log.Debugf("Message [%s] Correlation ID: %s ", msg.Body, msg.CorrelationId)
 			payload := &TransferFilesPayload{}
 
 			err := json.Unmarshal(msg.Body, payload)
 			if err != nil {
 				// @todo move to error queue
-				p.log.Errorf("Unable to unmarshall payload")
+				p.Log.Errorf("Unable to unmarshall payload")
 				msg.Reject(false)
 				break
 			}
@@ -195,20 +168,20 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 			if payload != nil && payload.Message.CorrelationID == "00000000-0000-0000-0000-000000000000" {
 				payload.Message.CorrelationID = uuid.New().String()
 				// this is useless so make a random one and log it
-				p.log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.Message.CorrelationID)
+				p.Log.Warnf("CorrelationID has not been set correctly, setting to a random GUID %s :", payload.Message.CorrelationID)
 				// @todo move to error queue
 			}
 
 			errList := p.Execute(payload.Message.CorrelationID)
 			if len(errList) > 0 {
-				p.log.Info("Direct Debit Run Finished With Errors")
+				p.Log.Info("Direct Debit Run Finished With Errors")
 				for _, e := range errList {
-					p.log.Errorf("%s ", e.Error())
+					p.Log.Errorf("%s ", e.Error())
 				}
 				// don't requeue at this stage
 				msg.Nack(false, false)
 			} else {
-				p.log.Info("Direct Debit Run Completed Successfully")
+				p.Log.Info("Direct Debit Run Completed Successfully")
 				msg.Ack(true)
 			}
 
@@ -216,50 +189,85 @@ func (p *ddPipeline) StartListener(listenerError chan error) {
 	}
 }
 
+func (p *CustomPipeline) GetCorrelationID() string {
+	return p.correlationID
+}
+func (p *CustomPipeline) SetCorrelationID(correlationID string) {
+	p.correlationID = correlationID
+}
+
 // Execute starts the execution of the pipeline
-func (p *ddPipeline) Execute(correlationID string) (errorList []error) {
+func (p *CustomPipeline) Execute(correlationID string) (errorList []error) {
 
 	p.correlationID = correlationID
-	p.log = log.WithField("correlationId", correlationID)
+	p.Log = log.WithField("correlationId", correlationID)
 
 	// @todo put this into a workflow
 	log.Info("Starting Direct Debit Pipeline")
 
+	// this needs to be dynamic based on what's there
 	// @todo config validation
 	// @todo turn into loop
-	if err := p.getFilesFromBFP(); err != nil {
-		// we need the files from the BFP otherwise there is no point
-		return append(errorList, err)
-	}
+	for _, task := range p.pipelineConfig.Tasks {
 
-	if err := p.cleanBFP(); err != nil {
-		// not a big deal if cleaning fails..we can clean it up after
-		errorList = append(errorList, err)
-	}
+		task.TaskConfiguration = string(task.TaskConfig)
 
-	if err := p.encryptFiles(); err != nil {
-		// We need all the files encrypted
-		// before we continue further
-		return err
-	}
+		if task.Enabled {
 
-	// Transfer the files
-	if err := p.sftpFilesToANZ(); err != nil {
-		errorList = append(errorList, err)
-	}
+			p.Log.Info("Start: " + task.Name)
 
-	if err := p.sftpFilesToPx(); err != nil {
-		errorList = append(errorList, err)
-	}
+			switch task.Type {
+			case "sftp.get":
 
-	// Archive the folder
-	if err := p.archive(); err != nil {
-		errorList = append(errorList, err)
-	}
+				if err := p.sftpGet(task); err != nil {
+					// we need the files from the BFP otherwise there is no point
+					return append(errorList, err)
+				}
+				break
+			case "sftp.clean":
+				if err := p.sftpClean(task); err != nil {
+					// not a big deal if cleaning fails..we can clean it up after
+					errorList = append(errorList, err)
+				}
+				break
+			case "encrypt":
+				if err := p.encryptFiles(task); err != nil {
+					// We need all the files encrypted
+					// before we continue further
+					return err
+				}
+				break
+			case "sftp.put":
+				// Transfer the files
+				if err := p.sftpPut(task); err != nil {
+					errorList = append(errorList, err)
+				}
 
-	// remove all the plain text files
-	if err := p.cleanUp(); err != nil {
-		errorList = append(errorList, err...)
+				// if err := p.sftpFilesToPx(); err != nil {
+				// 	errorList = append(errorList, err)
+				// }
+
+				break
+			case "archive":
+				// Archive the folder
+				if err := p.archive(task); err != nil {
+					errorList = append(errorList, err)
+				}
+
+				break
+			case "cleanup":
+				// remove all the plain text files
+				if err := p.cleanUp(task); err != nil {
+					errorList = append(errorList, err...)
+				}
+
+				break
+			}
+			p.Log.Info("Tasl " + task.Name + " Complete")
+		} else {
+			p.Log.Warn("Task " + task.Name + " Skipped - disabled in config")
+		}
+
 	}
 
 	if len(errorList) > 0 {
@@ -271,135 +279,138 @@ func (p *ddPipeline) Execute(correlationID string) (errorList []error) {
 	return errorList
 }
 
-func (p *ddPipeline) Close() error {
-	p.log.Info("Recieved Shutdown Request")
-	if p.transferlog != nil && p.transferlog.Conn != nil {
-		p.log.Info("Shutdown Database Connection")
-		if err := p.transferlog.Conn.Close(); err != nil {
-			p.log.Warningf("Error closing database connecton, %s", err.Error())
+func (p *CustomPipeline) Close() error {
+	p.Log.Info("Recieved Shutdown Request")
+	if transferLog != nil && transferLog.Conn != nil {
+		p.Log.Info("Shutdown Database Connection")
+		if err := transferLog.Conn.Close(); err != nil {
+			p.Log.Warningf("Error closing database connecton, %s", err.Error())
 		}
-		p.log.Info("Shutdown Database Complete")
+		p.Log.Info("Shutdown Database Complete")
 	}
 
-	if p.consumer != nil {
-		p.log.Info("Shutdown RabbitMQ Connection")
-		consumer := *p.consumer
+	if consumer != nil {
+		p.Log.Info("Shutdown RabbitMQ Connection")
+		consumer := *consumer
 		if err := consumer.Close(); err != nil {
-			p.log.Warningf("Error closing RabbitMQ connecton, %s", err.Error())
+			p.Log.Warningf("Error closing RabbitMQ connecton, %s", err.Error())
 			return err
 		}
-		p.log.Info("Shutdown RabbitMQ Complete")
+		p.Log.Info("Shutdown RabbitMQ Complete")
 	}
 
-	p.log.Info("Shutdown Complete")
+	p.Log.Info("Shutdown Complete")
 	return nil
 }
 
-func (p *ddPipeline) archive() error {
-	p.log.Info("Archiving Transferred Files")
+func (p *CustomPipeline) archive(taskDefinition *config.TaskDefinition) error {
 
-	archiveConfig := p.taskConfig.Tasks.ArchiveTransferred
-	if archiveConfig.Enabled {
-		if err := p.archiveTransferred(archiveConfig); err != nil {
-			p.log.Error(err.Error())
-			return err
-		}
-		p.log.Info("Archiving Transferred Files Complete")
-	} else {
-		p.log.Warn("Archiving Transferred Files Skipped")
+	archiveConfig, err := archive.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return err
 	}
 
-	return nil
-}
-
-func (p *ddPipeline) cleanUp() (err []error) {
-	p.log.Info("Clean Up Start")
-	cleanUpConfig := p.taskConfig.Tasks.CleanDirtyFiles
-	if cleanUpConfig.Enabled {
-		err = p.cleanDirtyFiles(cleanUpConfig)
-		p.log.Info("Clean Up Complete")
-	} else {
-		p.log.Warn("Clean Up Files Skipped")
+	if err := archive.ArchiveTransferred(archiveConfig, *p.Log); err != nil {
+		p.Log.Error(err.Error())
+		return err
 	}
-
-	return err
-}
-
-func (p *ddPipeline) getFilesFromBFP() error {
-
-	p.log.Info("GetFilesFromBFP Start")
-	bfpSftp := p.taskConfig.Tasks.GetFilesFromBFP
-	if bfpSftp.Enabled {
-		if err := p.sftpGet(bfpSftp); err != nil {
-			p.log.Error("Error Collecting the files. Unable to continue without files..Aborting")
-			return err
-		}
-		p.log.Info("GetFilesFromBFP Complete")
-		return nil
-	}
-	p.log.Warn("GetFilesFromBFP Skipped")
 
 	return nil
 }
 
-func (p *ddPipeline) cleanBFP() error {
+func (p *CustomPipeline) cleanUp(taskDefinition *config.TaskDefinition) (errs []error) {
 
-	p.log.Info("CleanBFP Start")
-	bfpClean := p.taskConfig.Tasks.CleanBFP
-	if bfpClean.Enabled {
-		if err := p.sftpClean(bfpClean); err != nil {
-			p.log.Warningf("Unable to clean remote dir %s", err.Error())
-			return err
-		}
-		return nil
+	cleanUpConfig, err := cleanup.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return append(errs, err)
 	}
-	p.log.Warn("CleanBFP Skipped")
-	return nil
+
+	errs = cleanup.CleanDirtyFiles(cleanUpConfig, p.Log)
+	if errs != nil {
+		return errs
+	}
+
+	return errs
 }
 
-func (p *ddPipeline) encryptFiles() []error {
-	p.log.Info("EncryptFiles Start")
-	encryptionConfig := p.taskConfig.Tasks.EncryptFiles
-	if encryptionConfig != nil && encryptionConfig.Enabled {
-		if err := p.pgpEncryptFilesForBank(encryptionConfig); err != nil {
-			p.log.Error("Unable to encrypt all files..Aborting")
-			return err
-		}
-		p.log.Info("Encrypt Files Complete")
-		return nil
+func (p *CustomPipeline) sftpGet(taskDefinition *config.TaskDefinition) error {
+
+	sftpConfig, err := sftpTask.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return err
 	}
-	p.log.Warn("Encrypt Files Skipped")
-	return nil
-}
 
-func (p *ddPipeline) sftpFilesToANZ() error {
-
-	p.log.Info("SftpFilesToANZ Start")
-
-	anzSftp := p.taskConfig.Tasks.SftpFilesToANZ
-	if anzSftp.Enabled {
-		if err := p.sftpTo(anzSftp); err != nil {
-			return err
-		}
-		p.log.Info("SftpFilesToANZ Complete")
-		return nil
+	if err := sftpTask.SFTPGet(sftpConfig, p.Log); err != nil {
+		p.Log.Error("Error Collecting the files. Unable to continue without files..Aborting")
+		return err
 	}
-	p.log.Warn("SftpFilesToANZ Skipped")
 
 	return nil
 }
 
-func (p *ddPipeline) sftpFilesToPx() error {
-	p.log.Info("SftpFilesToPx Start")
-	pxSftp := p.taskConfig.Tasks.SftpFilesToPx
-	if pxSftp.Enabled {
-		if err := p.sftpTo(pxSftp); err != nil {
-			return err
-		}
-		p.log.Info("SftpFilesToPx Complete")
-		return nil
+func (p *CustomPipeline) sftpClean(taskDefinition *config.TaskDefinition) error {
+
+	sftpConfig, err := sftpTask.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return err
 	}
-	p.log.Warn("SftpFilesToPx Skipped")
+
+	if err := sftpTask.SFTPClean(sftpConfig, p.Log); err != nil {
+		p.Log.Warningf("Unable to clean remote dir %s", err.Error())
+		return err
+	}
+	return nil
+}
+
+func (p *CustomPipeline) encryptFiles(taskDefinition *config.TaskDefinition) (errs []error) {
+
+	config, err := encryption.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return append(errs, err)
+	}
+
+	if err := encryption.PGPEncryptFilesForTransfer(config, encryptionLog, p.correlationID, p.Log); err != nil {
+		p.Log.Error("Unable to encrypt all files..Aborting")
+		return err
+	}
+
+	return nil
+
+}
+
+func (p *CustomPipeline) GetLogger() *logrus.Entry {
+	return p.Log
+}
+
+func (p *CustomPipeline) SetLogger(l *logrus.Entry) {
+	p.Log = l
+}
+
+func (p *CustomPipeline) sftpPut(taskDefinition *config.TaskDefinition) error {
+
+	sftpConfig, err := sftpTask.GetConfig(taskDefinition.TaskConfiguration)
+	if err != nil {
+		return err
+	}
+
+	if err := sftpTask.SFTPTo(sftpConfig, transferLog, p.correlationID, p.Log); err != nil {
+		return err
+	}
 
 	return nil
 }
+
+// func (p *CustomPipeline) sftpFilesToPx(taskDefinition *config.TaskDefinition) error {
+// 	p.Log.Info("SftpFilesToPx Start")
+
+// 	if pxSftp.Enabled {
+// 		if err := sftpTask.SFTPTo(taskConfig, p.transferlog, p.correlationID, p.Log); err != nil {
+// 			return err
+// 		}
+// 		p.Log.Info("SftpFilesToPx Complete")
+// 		return nil
+// 	}
+// 	p.Log.Warn("SftpFilesToPx Skipped")
+
+// 	return nil
+// }

@@ -7,18 +7,20 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"plugin"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/masenocturnal/pipefire/internal/common_interfaces"
 	"github.com/masenocturnal/pipefire/internal/config"
-	"github.com/masenocturnal/pipefire/pipelines/directdebit"
+	"github.com/masenocturnal/pipefire/internal/mq"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
-const version string = "0.9.13"
+const version string = "0.10.00"
 
 func main() {
 
@@ -63,41 +65,88 @@ func executePipelines() {
 	selectedDir := path.Dir(selectedConfig)
 	log.Infof("Using %s", selectedConfig)
 
-	pipelineName := "directdebit"
-	if c.Pipelines[pipelineName] != "" {
+	// load configuration
+	for pipelineName := range c.Pipelines {
+
 		file := c.Pipelines[pipelineName]
 		x := path.Join(selectedDir, file)
 		log.Infof("looking for %s", x)
 		jsonText, err := ioutil.ReadFile(x)
 		if err != nil {
 			log.Warningf("Unable to read file %s for pipeline %s", file, pipelineName)
+			continue
 		}
 
-		ddConfig := &directdebit.PipelineConfig{}
-		if err := json.Unmarshal(jsonText, ddConfig); err != nil {
-			log.Fatal("Unable to load config for directdebit pipeline")
-		}
+		pipelineConfig := &config.PipelineConfig{}
 
-		// create the dd pipeline
-		directDebitPipeline, err := directdebit.New(ddConfig)
-		if err != nil {
+		if err := json.Unmarshal(jsonText, pipelineConfig); err != nil {
+			log.Errorf("Unable to load config for pipeline: %s ", pipelineName)
 			log.Error(err.Error())
 			os.Exit(1)
+		} else {
+			log.Debugf("Config %s loaded", x)
 		}
 
-		for {
-
-			log.Debugf("No of goroutines %d", runtime.NumGoroutine())
-			listenerError := make(chan error)
-
-			go directDebitPipeline.StartListener(listenerError)
-			err := <-listenerError
-
-			log.Warningf("RabbitMQ Reconnect Required: %s", err)
-			time.Sleep(2 * time.Second)
+		// load plugin
+		p, err := plugin.Open("../build/plugins/" + pipelineName + ".so")
+		if err != nil {
+			log.Errorf("Unable to load plugin for %s", pipelineName)
+			log.Error(err.Error())
+			continue
 		}
+
+		// look for the function that defines the version string
+		GetVersion, err := p.Lookup("GetVersion")
+		if err != nil {
+			log.Errorf("Unable to find the plugin version for %s", pipelineName)
+			log.Error(err.Error())
+			continue
+		} else {
+			version := GetVersion.(func() string)()
+			log.Infof("Pipefire Pipeline Plugin: %s version %s has been loaded successfully", pipelineName, version)
+		}
+
+		// look for the function that defines the version string
+		New, err := p.Lookup("New")
+		if err != nil {
+			log.Errorf("Unable to find the New function for %s", pipelineName)
+			log.Error(err.Error())
+			continue
+		} else {
+			pipeline, err := New.(func(*config.PipelineConfig) (interface{}, error))(pipelineConfig)
+
+			if err != nil {
+				log.Error(err.Error())
+
+				// we are really expecting these to establish without a hitch
+				// if it's not in a good state, we would rather bail as when we start listenging for triggers
+				// we're really expecting to walk away and for the pipelines to execute correctly
+				os.Exit(1)
+			}
+
+			for {
+
+				log.Debugf("No of goroutines %d", runtime.NumGoroutine())
+				listenerError := make(chan error)
+
+				p := pipeline.(common_interfaces.PipelineInterface)
+				go p.StartListener(listenerError)
+				err := <-listenerError
+
+				log.Warningf("RabbitMQ Reconnect Required: %s", err)
+				time.Sleep(2 * time.Second)
+			}
+
+		}
+
 	}
+}
 
+type CustomPipeline struct {
+	Log            *log.Entry
+	correlationID  string
+	consumer       *mq.MessageConsumer
+	pipelineConfig *config.PipelineConfig
 }
 
 func initLogging(lvl string) {
