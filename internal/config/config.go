@@ -1,6 +1,10 @@
 package config
 
 import (
+	"encoding/json"
+
+	mysql "github.com/go-sql-driver/mysql"
+	"github.com/masenocturnal/pipefire/internal/mq"
 	"github.com/spf13/viper"
 )
 
@@ -10,6 +14,23 @@ type HostConfig struct {
 	Background bool              `json:"background"`
 	Pipelines  map[string]string `json:"pipelines"`
 }
+
+// PipelineConfig defines the required arguements for the pipeline
+type PipelineConfig struct {
+	Database mysql.Config
+	Rabbitmq *mq.BusConfig
+	Tasks    []*TaskDefinition
+}
+
+//TasksConfig Configuration
+type TaskDefinition struct {
+	Name              string
+	Type              string
+	TaskConfiguration string
+	TaskConfig        json.RawMessage `json:"taskConfig,"` // we unmarshal this based on type later
+	Enabled           bool
+}
+
 type includeFile string
 
 // ReadApplicationConfig will load the application configuration from known places on the disk or environment

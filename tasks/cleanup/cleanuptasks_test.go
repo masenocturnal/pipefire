@@ -1,4 +1,4 @@
-package directdebit
+package cleanup
 
 import (
 	"io/ioutil"
@@ -28,20 +28,20 @@ func TestCleanup(t *testing.T) {
 		}
 	}
 
-	cleanUpConfig := &CleanUpConfig{
-		Paths: paths,
-	}
+	// cleanUpConfig := &CleanUpConfig{
+	// 	Paths: paths,
+	// }
 
-	tasksConfig := &TasksConfig{
-		CleanDirtyFiles: cleanUpConfig,
-	}
-	pipeline, err := getPipeline(tasksConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// tasksConfig := &config.TasksConfig{
+	// 	CleanDirtyFiles: cleanUpConfig,
+	// }
+	// pipeline, err := getPipeline(tasksConfig)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
-	errs := pipeline.cleanDirtyFiles(cleanUpConfig)
-	if len(errs) > 0 {
-		t.Error(err)
-	}
+	// errs := pipeline.cleanDirtyFiles(cleanUpConfig)
+	// if len(errs) > 0 {
+	// 	t.Error(err)
+	// }
 }

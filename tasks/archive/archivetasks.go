@@ -1,13 +1,16 @@
-package directdebit
+package archive
 
 import (
 	"archive/tar"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 //ArchiveConfig configuration for the archive task
@@ -17,16 +20,26 @@ type ArchiveConfig struct {
 	Enabled bool
 }
 
+//GetConfig for a an appropriately shaped json configuration string return a valid ArchiveConfig
+func GetConfig(jsonText string) (*ArchiveConfig, error) {
+	archiveConfig := &ArchiveConfig{}
+
+	err := json.Unmarshal([]byte(jsonText), archiveConfig)
+
+	return archiveConfig, err
+
+}
+
 // ArchiveTransferred Creates a tar archive of the encrypted files.
 // As the files are encrypted there is no point compressing them
-func (d ddPipeline) archiveTransferred(conf *ArchiveConfig) (err error) {
+func ArchiveTransferred(conf *ArchiveConfig, l logrus.Entry) (err error) {
 
 	fileList, err := getFileList(conf.Src)
 
-	errors := d.createTar(fileList, conf.Dest)
+	errors := createTar(fileList, conf.Dest, l)
 	if errors != nil && len(errors) > 0 {
 		for _, e := range errors {
-			d.log.Errorf("Error: %s ", e.Error())
+			l.Errorf("Error: %s ", e.Error())
 		}
 		return fmt.Errorf("Unable to create archive")
 	}
@@ -71,7 +84,7 @@ func getFileList(src string) ([]string, error) {
 	return fileList, err
 }
 
-func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []error) {
+func createTar(filePaths []string, destDir string, log log.Entry) (errors []error) {
 
 	if err := os.MkdirAll(destDir, 0760); err != nil {
 		return append(errors, fmt.Errorf("Can't create destination directory %s : %s ", destDir, err.Error()))
@@ -93,7 +106,7 @@ func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []erro
 
 		s, err := os.Stat(file)
 		if err != nil {
-			d.log.Errorf("File %s can't be read %s", file, err.Error())
+			log.Errorf("File %s can't be read %s", file, err.Error())
 			return append(errors, err)
 		}
 
@@ -107,16 +120,16 @@ func (d ddPipeline) createTar(filePaths []string, destDir string) (errors []erro
 		}
 		contents, err := ioutil.ReadFile(file)
 		if err != nil {
-			d.log.Errorf("Error reading file: %s : %s", file, err.Error())
+			log.Errorf("Error reading file: %s : %s", file, err.Error())
 			return append(errors, err)
 		}
 		if _, err := tw.Write(contents); err != nil {
-			d.log.Errorf("Unable to close tar writer %s ", err.Error())
+			log.Errorf("Unable to close tar writer %s ", err.Error())
 			return append(errors, err)
 		}
 	}
 	if err := tw.Close(); err != nil {
-		d.log.Errorf("Unable to close tar writer %s ", err.Error())
+		log.Errorf("Unable to close tar writer %s ", err.Error())
 		return append(errors, err)
 	}
 	return

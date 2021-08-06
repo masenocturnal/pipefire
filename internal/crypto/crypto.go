@@ -42,6 +42,14 @@ type Provider interface {
 	GetSigningKey() (signingKey *openpgp.Entity, err error)
 }
 
+// EncryptFilesConfig is the configuration requriements for the encryptFiles task
+type EncryptFilesConfig struct {
+	SrcDir    string                    `json:"srcDir"`
+	OutputDir string                    `json:"outputDir"`
+	Providers map[string]ProviderConfig `json:"providers"`
+	Enabled   bool                      `json:"enabled"`
+}
+
 type provider struct {
 	config ProviderConfig
 	log    *log.Entry

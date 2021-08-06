@@ -1,4 +1,4 @@
-package directdebit
+package encryption_recorder
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package directdebit
+package mq
 
 import (
 	"fmt"
@@ -51,24 +51,11 @@ type QueueClient interface {
 
 //MessageConsumer holds the configuration, current connection and open channel
 type MessageConsumer struct {
-	config          *BusConfig
+	Config          *BusConfig
 	Connection      *amqp.Connection
 	ConsumerChannel *amqp.Channel
 	log             *log.Entry
 	Shutdown        bool
-}
-
-//TransferFilesPayload represents the payload received from the message bus
-type TransferFilesPayload struct {
-	MessageType []string
-	Message     MessagePayload
-}
-
-//MessagePayload represents the message content in a TransferFilesPayload from the message bus
-type MessagePayload struct {
-	Task          string `json:"task"`
-	StartDate     string `json:"start_date"`
-	CorrelationID string `json:"correlationId"`
 }
 
 //BusError indicates there is a connection issue with the bus and an action to take
@@ -82,7 +69,7 @@ func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 
 	consumer := &MessageConsumer{
 		log:    log.WithField("Component", "Consumer"),
-		config: config,
+		Config: config,
 	}
 	return consumer
 }
@@ -91,7 +78,7 @@ func NewConsumer(config *BusConfig, log *log.Entry) *MessageConsumer {
 func (c *MessageConsumer) Connect() (*amqp.Connection, error) {
 
 	var err error
-	uri := c.config.ConnectionString()
+	uri := c.Config.ConnectionString()
 	c.log.Info("Try and connect to RabbitMQ")
 	conn, err := amqp.Dial(uri)
 	if err != nil {
@@ -105,7 +92,7 @@ func (c *MessageConsumer) Connect() (*amqp.Connection, error) {
 //Configure Creates the Exchange and Queue
 func (c *MessageConsumer) Configure(ch *amqp.Channel) (err error) {
 
-	config := c.config
+	config := c.Config
 
 	if len(config.Exchanges) > 0 {
 		for _, ex := range config.Exchanges {

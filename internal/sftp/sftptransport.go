@@ -28,6 +28,14 @@ type Endpoint struct {
 	Port        int64  `json:"port"`
 }
 
+//SftpConfig Required Params for transferring to or from an SFTP Server
+type SftpConfig struct {
+	RemoteDir string   `json:"remoteDir"`
+	LocalDir  string   `json:"localDir"`
+	Sftp      Endpoint `json:"sftp"`
+	Enabled   bool     `json:"enabled"`
+}
+
 //FileTransferConfirmation is a summmary of the transferred file
 type FileTransferConfirmation struct {
 	LocalFileName    string
