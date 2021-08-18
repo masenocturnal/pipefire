@@ -7,7 +7,7 @@ import (
 type PipelineInterface interface {
 	GetCorrelationID() string
 	SetCorrelationID(string)
-	Execute(string) []error
+	Execute(interface{}) []error
 	StartListener(chan error)
 	GetLogger() *logrus.Entry
 	SetLogger(*logrus.Entry)

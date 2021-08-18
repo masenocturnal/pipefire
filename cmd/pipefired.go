@@ -88,7 +88,7 @@ func executePipelines() {
 		}
 
 		// load plugin
-		p, err := plugin.Open("../build/plugins/" + pipelineName + ".so")
+		p, err := plugin.Open(c.PluginDir + pipelineName + ".so")
 		if err != nil {
 			log.Errorf("Unable to load plugin for %s", pipelineName)
 			log.Error(err.Error())
@@ -138,7 +138,6 @@ func executePipelines() {
 			}
 
 		}
-
 	}
 }
 

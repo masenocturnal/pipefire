@@ -29,7 +29,7 @@ func GetConfig(jsonText string) (*sftp.SftpConfig, error) {
 }
 
 // get files from a particular endpoint
-func SFTPGet(conf *sftp.SftpConfig, l *logrus.Entry) error {
+func SFTPGet(conf *sftp.SftpConfig, filesToTransfer *[]sftp.TransferFiles, l *logrus.Entry) error {
 	l.Infof("Begin sftpGet: %s ", conf.Sftp.Host)
 	sftp, err := sftp.NewConnection("From", conf.Sftp, l)
 	if err != nil {
@@ -38,7 +38,7 @@ func SFTPGet(conf *sftp.SftpConfig, l *logrus.Entry) error {
 	defer sftp.Close()
 
 	// grab all the files from the pickup directory
-	confirmations, errors := sftp.GetDir(conf.RemoteDir, conf.LocalDir)
+	confirmations, errors := sftp.GetDir(conf.RemoteDir, conf.LocalDir, filesToTransfer)
 	if errors.Len() > 0 {
 		// show all errors
 		for temp := errors.Front(); temp != nil; temp = temp.Next() {

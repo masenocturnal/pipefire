@@ -8,8 +8,8 @@
             "name": "Launch",
             "type": "go",
             "request": "launch",
-            "mode": "auto",
-            "program": "${workspaceRoot}/cmd/pipefired.go",
+            "mode": "exec",
+            "program": "${workspaceRoot}/cmd/pipefired",
             "apiVersion": 2,
             "dlvLoadConfig": {
                 "followPointers": true,
@@ -19,7 +19,7 @@
                 "maxStructFields": -1
             },
             "env": {},
-            "args": []
+            "args": ["-gcflags='all=-N -l'" ]
         }
     ]
 }
