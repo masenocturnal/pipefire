@@ -12,6 +12,7 @@ import (
 type HostConfig struct {
 	LogLevel   string            `json:"loglevel"`
 	Background bool              `json:"background"`
+	PluginDir  string            `json:"PluginDir"`
 	Pipelines  map[string]string `json:"pipelines"`
 }
 

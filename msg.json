@@ -1,0 +1,20 @@
+{
+    "messageType": [
+        "urn:message:Certegy.DirectDebit.Messaging.Contracts.Payload:BankTransferPayload"
+    ],
+    "message": {
+        "task": "begin",
+        "start_date": "",
+        "correlationId": "",
+        "files": [
+            {
+                "checksum": "6311DA8F7A01C15E73A209CBBC5D0B3A8B345477",
+                "fileName": "/Pickup/PX/sneh.txt"
+            },
+            {
+                "checksum": "6311DA8F7A01C15E73A209CBBC5D0B3A8B345477",
+                "fileName": "\\Destination_ANZ_Seller_Settlement_DD\\SPR.1000000067.csv"
+            }
+        ]
+    }
+}

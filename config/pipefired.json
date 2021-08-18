@@ -1,6 +1,7 @@
 {
     "loglevel": "debug",
     "background": "true",
+    "PluginDir": "../build/plugins/",
     "pipelines": {
         "directdebit": "directdebit.json"
     }

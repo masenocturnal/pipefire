@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,6 +50,11 @@ type FileTransferConfirmation struct {
 	TransferredBytes int64
 }
 
+// TransferFiles Files to transfer
+type TransferFiles struct {
+	Checksum string
+	FileName string
+}
 type transport struct {
 	Client  *sftp.Client
 	Session *ssh.Client
@@ -61,8 +67,8 @@ type Transport interface {
 	SendFile(string, string) (*FileTransferConfirmation, error)
 	SendDir(string, string) (*list.List, *list.List)
 	ListRemoteDir(remoteDir string) error
-	GetFile(remoteFile string, localFile string) (*FileTransferConfirmation, error)
-	GetDir(remoteDir string, localDir string) (*list.List, *list.List)
+	GetFile(remoteFile string, localFile string, filesToTransfer *[]TransferFiles) (*FileTransferConfirmation, error)
+	GetDir(remoteDir string, localDir string, filesToTransfer *[]TransferFiles) (*list.List, *list.List)
 	CleanDir(string) error
 	RemoveDir(string) error
 	RemoveFile(string) error
@@ -202,8 +208,18 @@ func (c transport) RemoveFile(remoteFile string) error {
 	return err
 }
 
+func fileInList(items []TransferFiles, fileName string) bool {
+	for _, item := range items {
+
+		if item.FileName == fileName {
+			return true
+		}
+	}
+	return false
+}
+
 //	GetFile Acquires a file from the remote service
-func (c transport) GetFile(remotePath string, localPath string) (*FileTransferConfirmation, error) {
+func (c transport) GetFile(remotePath string, localPath string, filesToTransfer *[]TransferFiles) (*FileTransferConfirmation, error) {
 	xfer := &FileTransferConfirmation{}
 	c.log.Debugf("Attempting to get: %s@%s to %s@local: ", remotePath, c.Name, localPath)
 	// create a hash writer so that we can create a hash as we are
@@ -221,15 +237,28 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	remoteFile, err := c.Client.Lstat(remotePath)
 	if err != nil {
 
-		return nil, fmt.Errorf("File %s: %s", remotePath, err.Error())
+		return nil, fmt.Errorf("file %s: %s", remotePath, err.Error())
 	}
 	if remoteFile.IsDir() {
-		return xfer, fmt.Errorf("Remote  file %s is a directory, call GetDir()", remotePath)
+		return xfer, fmt.Errorf("femote  file %s is a directory, call GetDir()", remotePath)
 	}
 
 	// ignore symlinks for now
 	if remoteFile.Mode()&os.ModeSymlink != 0 {
-		return nil, fmt.Errorf("File %s is a symlink..ignoring. %s", remotePath, err.Error())
+		return nil, fmt.Errorf("file %s is a symlink..ignoring. %s", remotePath, err.Error())
+	}
+
+	remotePath, _ = c.Client.RealPath(remotePath)
+	// When we are passed the list of files to transfer ensure it's in the allow list
+	if filesToTransfer == nil || len(*filesToTransfer) == 0 || fileInList(*filesToTransfer, remotePath) {
+		c.log.Debugf("transfer is allowed")
+	} else {
+		c.log.Warnf("remotePath: %s is not in list of files we should transfer", remotePath)
+		xferList, _ := json.Marshal(filesToTransfer)
+		c.log.Debugf("filesToTransfer: %s", xferList)
+		c.log.Debugf("remotePath: %s", remotePath)
+
+		return xfer, fmt.Errorf("list of files to transfer does not contain: %s %v", remotePath, filesToTransfer)
 	}
 
 	xfer.RemoteFileName = remotePath
@@ -249,6 +278,10 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 
 	// open source file
 	sourceReader, err := c.Client.Open(remotePath)
+	if err != nil {
+		return xfer, err
+	}
+
 	multiWriter := io.MultiWriter(dstFile, hashWriter)
 
 	// copy source file to destination file
@@ -284,7 +317,7 @@ func (c transport) GetFile(remotePath string, localPath string) (*FileTransferCo
 	return xfer, err
 }
 
-func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *list.List, errorList *list.List) {
+func (c transport) GetDir(remoteDir string, localDir string, filesToTransfer *[]TransferFiles) (confirmationList *list.List, errorList *list.List) {
 	confirmationList = list.New()
 	errorList = list.New()
 
@@ -304,7 +337,9 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 	if !r.IsDir() {
 		// remote end is a file...but we have a local directory
 		// to stash it in, so let's just make it work
-		confirmation, err := c.GetFile(remoteDir, localDir)
+
+		confirmation, err := c.GetFile(remoteDir, localDir, filesToTransfer)
+
 		if err != nil {
 			errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))
 		}
@@ -336,7 +371,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 
 			if file.IsDir() {
 				newLocalFilePath := filepath.Join(localDir, file.Name())
-				confirmations, errList := c.GetDir(currentRemoteFilePath, newLocalFilePath)
+				confirmations, errList := c.GetDir(currentRemoteFilePath, newLocalFilePath, filesToTransfer)
 				if err != nil && errList.Len() > 0 {
 					for temp := errList.Front(); temp != nil; temp = temp.Next() {
 						errorList.PushFront(temp.Value)
@@ -348,7 +383,7 @@ func (c transport) GetDir(remoteDir string, localDir string) (confirmationList *
 				// ignore symlinks
 				continue
 			} else {
-				confirmation, err := c.GetFile(currentRemoteFilePath, localDir)
+				confirmation, err := c.GetFile(currentRemoteFilePath, localDir, filesToTransfer)
 				if err != nil {
 					errorList.PushFront(err)
 				}

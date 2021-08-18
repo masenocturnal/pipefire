@@ -11,6 +11,7 @@ import (
 	"github.com/masenocturnal/pipefire/internal/mq"
 	"github.com/masenocturnal/pipefire/internal/transfer_recorder"
 
+	"github.com/masenocturnal/pipefire/internal/sftp"
 	"github.com/masenocturnal/pipefire/tasks/archive"
 	"github.com/masenocturnal/pipefire/tasks/cleanup"
 	"github.com/masenocturnal/pipefire/tasks/encryption"
@@ -29,9 +30,10 @@ type TransferFilesPayload struct {
 
 //MessagePayload represents the message content in a TransferFilesPayload from the message bus
 type MessagePayload struct {
-	Task          string `json:"task"`
-	StartDate     string `json:"start_date"`
-	CorrelationID string `json:"correlationId"`
+	Task          string               `json:"task"`
+	StartDate     string               `json:"start_date"`
+	CorrelationID string               `json:"correlationId"`
+	Files         []sftp.TransferFiles `json:"files,omitempty"`
 }
 
 type CustomPipeline struct {
@@ -172,7 +174,7 @@ func (p *CustomPipeline) StartListener(listenerError chan error) {
 				// @todo move to error queue
 			}
 
-			errList := p.Execute(payload.Message.CorrelationID)
+			errList := p.Execute(payload.Message)
 			if len(errList) > 0 {
 				p.Log.Info("Direct Debit Run Finished With Errors")
 				for _, e := range errList {
@@ -197,10 +199,11 @@ func (p *CustomPipeline) SetCorrelationID(correlationID string) {
 }
 
 // Execute starts the execution of the pipeline
-func (p *CustomPipeline) Execute(correlationID string) (errorList []error) {
+func (p *CustomPipeline) Execute(msg interface{}) (errorList []error) {
 
-	p.correlationID = correlationID
-	p.Log = log.WithField("correlationId", correlationID)
+	payload := msg.(MessagePayload)
+	p.correlationID = payload.CorrelationID
+	p.Log = log.WithField("correlationId", p.correlationID)
 
 	// @todo put this into a workflow
 	log.Info("Starting Direct Debit Pipeline")
@@ -212,6 +215,8 @@ func (p *CustomPipeline) Execute(correlationID string) (errorList []error) {
 
 		task.TaskConfiguration = string(task.TaskConfig)
 
+		filesToXfer := payload.Files
+
 		if task.Enabled {
 
 			p.Log.Info("Start: " + task.Name)
@@ -219,49 +224,43 @@ func (p *CustomPipeline) Execute(correlationID string) (errorList []error) {
 			switch task.Type {
 			case "sftp.get":
 
-				if err := p.sftpGet(task); err != nil {
-					// we need the files from the BFP otherwise there is no point
+				sftpConfig, err := sftpTask.GetConfig(task.TaskConfiguration)
+				if err != nil {
 					return append(errorList, err)
 				}
-				break
+
+				if err := sftpTask.SFTPGet(sftpConfig, &filesToXfer, p.Log); err != nil {
+					p.Log.Error("Error Collecting the files. Unable to continue without files..Aborting")
+					return append(errorList, err)
+				}
+
 			case "sftp.clean":
 				if err := p.sftpClean(task); err != nil {
 					// not a big deal if cleaning fails..we can clean it up after
 					errorList = append(errorList, err)
 				}
-				break
+
 			case "encrypt":
 				if err := p.encryptFiles(task); err != nil {
 					// We need all the files encrypted
 					// before we continue further
 					return err
 				}
-				break
 			case "sftp.put":
 				// Transfer the files
 				if err := p.sftpPut(task); err != nil {
 					errorList = append(errorList, err)
 				}
-
-				// if err := p.sftpFilesToPx(); err != nil {
-				// 	errorList = append(errorList, err)
-				// }
-
-				break
 			case "archive":
 				// Archive the folder
 				if err := p.archive(task); err != nil {
 					errorList = append(errorList, err)
 				}
-
-				break
 			case "cleanup":
 				// remove all the plain text files
 				if err := p.cleanUp(task); err != nil {
 					errorList = append(errorList, err...)
 				}
-
-				break
 			}
 			p.Log.Info("Tasl " + task.Name + " Complete")
 		} else {
@@ -331,21 +330,6 @@ func (p *CustomPipeline) cleanUp(taskDefinition *config.TaskDefinition) (errs []
 	}
 
 	return errs
-}
-
-func (p *CustomPipeline) sftpGet(taskDefinition *config.TaskDefinition) error {
-
-	sftpConfig, err := sftpTask.GetConfig(taskDefinition.TaskConfiguration)
-	if err != nil {
-		return err
-	}
-
-	if err := sftpTask.SFTPGet(sftpConfig, p.Log); err != nil {
-		p.Log.Error("Error Collecting the files. Unable to continue without files..Aborting")
-		return err
-	}
-
-	return nil
 }
 
 func (p *CustomPipeline) sftpClean(taskDefinition *config.TaskDefinition) error {
