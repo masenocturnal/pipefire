@@ -235,9 +235,14 @@ func (p *CustomPipeline) Execute(msg interface{}) (errorList []error) {
 				}
 
 			case "sftp.clean":
-				if err := p.sftpClean(task); err != nil {
-					// not a big deal if cleaning fails..we can clean it up after
-					errorList = append(errorList, err)
+				sftpConfig, err := sftpTask.GetConfig(task.TaskConfiguration)
+				if err != nil {
+					return append(errorList, err)
+				}
+
+				if err := sftpTask.SFTPClean(sftpConfig, &filesToXfer, p.Log); err != nil {
+					p.Log.Warningf("Unable to clean remote dir %s", err.Error())
+					return append(errorList, err)
 				}
 
 			case "encrypt":
@@ -330,20 +335,6 @@ func (p *CustomPipeline) cleanUp(taskDefinition *config.TaskDefinition) (errs []
 	}
 
 	return errs
-}
-
-func (p *CustomPipeline) sftpClean(taskDefinition *config.TaskDefinition) error {
-
-	sftpConfig, err := sftpTask.GetConfig(taskDefinition.TaskConfiguration)
-	if err != nil {
-		return err
-	}
-
-	if err := sftpTask.SFTPClean(sftpConfig, p.Log); err != nil {
-		p.Log.Warningf("Unable to clean remote dir %s", err.Error())
-		return err
-	}
-	return nil
 }
 
 func (p *CustomPipeline) encryptFiles(taskDefinition *config.TaskDefinition) (errs []error) {

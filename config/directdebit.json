@@ -68,7 +68,7 @@
 					"key": "~/.ssh/id_rsa",
 					"username": "test",
 					"password": "",
-					"keyPassword": "changeme",
+					"keyPassword": "",
 					"port": 22
 				}
 			},
@@ -82,14 +82,14 @@
 				"localDir": "",
 				"sftp": {
 					"host": "172.20.1.3",
-					"key": "/home/sysam/.ssh/bfp_rsa.pem",
+					"key": "~/.ssh/id_rsa",
 					"username": "test",
 					"password": "",
 					"keyPassword": "",
 					"port": 22
 				}
 			},
-			"enabled": false
+			"enabled": true
 		},
 		{
 			"name": "encryptFiles",
@@ -99,7 +99,7 @@
 				"outputDir": "/tmp/ddrun/Encrypted",
 				"providers": {
 					"anz": {
-						"encryptionKey": "/home/andmas/keys/public/anz.pub",
+						"encryptionKey": "anz.pub",
 						"fingerprint": "",
 						"signingKey": "",
 						"signingKeyPassword": "",
@@ -110,7 +110,7 @@
 						"enabled": true
 					},
 					"px": {
-						"encryptionKey": "/home/andmas/keys/public/anz.pub",
+						"encryptionKey": "px.pub",
 						"fingerprint": "",
 						"signingKey": "",
 						"signingKeyPassword": "",
@@ -152,7 +152,7 @@
 					"key": "~/.ssh/id_rsa",
 					"username": "test",
 					"password": "",
-					"keyPassword": "changeme",
+					"keyPassword": "",
 					"port": 22
 				}
 			},

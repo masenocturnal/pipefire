@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -69,7 +68,7 @@ type Transport interface {
 	ListRemoteDir(remoteDir string) error
 	GetFile(remoteFile string, localFile string, filesToTransfer *[]TransferFiles) (*FileTransferConfirmation, error)
 	GetDir(remoteDir string, localDir string, filesToTransfer *[]TransferFiles) (*list.List, *list.List)
-	CleanDir(string) error
+	CleanDir(remoteDir string, filesToTransfer *[]TransferFiles) error
 	RemoveDir(string) error
 	RemoveFile(string) error
 	Close()
@@ -115,7 +114,7 @@ func NewConnection(name string, conf Endpoint, log *log.Entry) (Transport, error
 
 	// @todo validate config
 	if conf.Host == "" {
-		return transport, fmt.Errorf("Host has not been set for %s", name)
+		return transport, fmt.Errorf("host has not been set for %s", name)
 	}
 	if conf.Port == 0 {
 		log.Println("Port not set, using 22")
@@ -152,7 +151,7 @@ func NewConnection(name string, conf Endpoint, log *log.Entry) (Transport, error
 
 //CleanDir will recursively iterate through the directories
 //and remove any files in them leaving the directory structure in place
-func (c transport) CleanDir(remoteDir string) error {
+func (c transport) CleanDir(remoteDir string, filesToDelete *[]TransferFiles) error {
 	log := c.log.WithField("Remote Directory", remoteDir)
 	log.Debugf("Attempting to clean remote directory: %s", remoteDir)
 
@@ -176,10 +175,26 @@ func (c transport) CleanDir(remoteDir string) error {
 			currentRemoteFilePath := filepath.Join(remoteDir, file.Name())
 
 			if file.IsDir() {
-				lastError = c.CleanDir(currentRemoteFilePath)
+				lastError = c.CleanDir(currentRemoteFilePath, filesToDelete)
 
 			} else {
-				lastError = c.RemoveFile(currentRemoteFilePath)
+				log.Printf("Name is %s : %s ", file.Name(), currentRemoteFilePath)
+
+				// // it's a file
+				// // before we delete it, look at the list of files to delete to ensure it's in the list
+				currentRemoteFilePath, _ = c.Client.RealPath(currentRemoteFilePath)
+				// // When we are passed the list of files to transfer ensure it's in the allow list
+				if filesToDelete == nil || len(*filesToDelete) == 0 || fileInList(*filesToDelete, currentRemoteFilePath) {
+
+					if lastError = c.RemoveFile(currentRemoteFilePath); lastError == nil {
+						c.log.Info("Removed %s ", currentRemoteFilePath)
+					}
+				} else {
+					c.log.Warnf("remotePath: %s is not in list of files we should delete", currentRemoteFilePath)
+					c.log.Debugf("remotePath: %s", currentRemoteFilePath)
+
+				}
+
 			}
 		}
 	}
@@ -254,11 +269,9 @@ func (c transport) GetFile(remotePath string, localPath string, filesToTransfer 
 		c.log.Debugf("transfer is allowed")
 	} else {
 		c.log.Warnf("remotePath: %s is not in list of files we should transfer", remotePath)
-		xferList, _ := json.Marshal(filesToTransfer)
-		c.log.Debugf("filesToTransfer: %s", xferList)
 		c.log.Debugf("remotePath: %s", remotePath)
 
-		return xfer, fmt.Errorf("list of files to transfer does not contain: %s %v", remotePath, filesToTransfer)
+		return xfer, fmt.Errorf("list of files to transfer does not contain: %s", remotePath)
 	}
 
 	xfer.RemoteFileName = remotePath
@@ -313,7 +326,7 @@ func (c transport) GetFile(remotePath string, localPath string, filesToTransfer 
 	hashWriter.Write(contents)
 	xfer.LocalHash = hex.EncodeToString(hashWriter.Sum(nil))
 
-	c.log.Debugln("Transferred")
+	c.log.Infof("Transferred file %s", localPath)
 	return xfer, err
 }
 
@@ -321,7 +334,7 @@ func (c transport) GetDir(remoteDir string, localDir string, filesToTransfer *[]
 	confirmationList = list.New()
 	errorList = list.New()
 
-	c.log.Debugf("Attempting to GetDir %s to %s ", remoteDir, localDir)
+	c.log.Debugf("attempting to GetDir %s to %s ", remoteDir, localDir)
 	err := os.MkdirAll(localDir, 0700)
 	if err != nil {
 		errorList.PushFront(err)
@@ -330,7 +343,7 @@ func (c transport) GetDir(remoteDir string, localDir string, filesToTransfer *[]
 
 	r, err := c.Client.Stat(remoteDir)
 	if err != nil {
-		errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))
+		errorList.PushFront(fmt.Errorf("remote file : %s : %s", remoteDir, err.Error()))
 		return
 	}
 
@@ -341,7 +354,7 @@ func (c transport) GetDir(remoteDir string, localDir string, filesToTransfer *[]
 		confirmation, err := c.GetFile(remoteDir, localDir, filesToTransfer)
 
 		if err != nil {
-			errorList.PushFront(fmt.Errorf("Remote file : %s : %s", remoteDir, err.Error()))
+			errorList.PushFront(fmt.Errorf("remote file : %s : %s", remoteDir, err.Error()))
 		}
 		confirmationList.PushFront(confirmation)
 		// we should probably bail here as it's not a directory
@@ -401,12 +414,12 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 	xfer := &FileTransferConfirmation{}
 
 	if len(remotePath) == 0 || len(localPath) == 0 {
-		err := fmt.Errorf("Either the local path %s: or the remotePath is emtpy: %s", localPath, remotePath)
+		err := fmt.Errorf("either the local path %s: or the remotePath is emtpy: %s", localPath, remotePath)
 		c.log.Errorf(err.Error())
 		return xfer, err
 	}
 
-	c.log.Debugf("Attempting to send: localPath: %s to remotePath: %s ", localPath, remotePath)
+	c.log.Debugf("attempting to send: localPath: %s to remotePath: %s ", localPath, remotePath)
 	// create a hash writer so that we can create a hash as we are
 	// copying the files
 	hashWriter := sha256.New()
@@ -425,6 +438,9 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 
 	// ensure we can read the local file first before we create the remote file
 	data, err := ioutil.ReadFile(localPath)
+	if err != nil {
+		return xfer, err
+	}
 
 	// calculate local checksum
 	_, err = hashWriter.Write(data)
@@ -491,13 +507,16 @@ func (c transport) SendFile(localPath string, remotePath string) (*FileTransferC
 
 	// actually write the packets
 	transferredBytes, err := multiwriter.Write(data)
+	if err != nil {
+		c.log.Debug("error when writing some portion of the file", err.Error())
+	}
 
 	// close the connection
 	err = remoteFile.Close()
 	if err != nil {
-		c.log.Debug("File successfully closed on the remote end", remotePath, err.Error())
-		c.log.Errorf("Error writing %s. Error: %s", remotePath, err.Error())
-		c.log.Error("File DID NOT TRANSFER.", remotePath, err.Error())
+		c.log.Debug("file successfully closed on the remote end", remotePath, err.Error())
+		c.log.Errorf("error writing %s. Error: %s", remotePath, err.Error())
+		c.log.Error("file DID NOT TRANSFER.", remotePath, err.Error())
 	} else {
 		xfer.TransferredBytes = int64(transferredBytes)
 		xfer.TransferredHash = hex.EncodeToString(hashWriter.Sum(nil))
@@ -545,7 +564,7 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	errorList = list.New()
 
 	if len(srcDir) == 0 || len(destDir) == 0 {
-		errorList.PushFront(fmt.Errorf("Either the srcDir %s, or the destDir: %s is not present but both are required", srcDir, destDir))
+		errorList.PushFront(fmt.Errorf("either the srcDir %s, or the destDir: %s is not present but both are required", srcDir, destDir))
 		return
 	}
 
@@ -556,7 +575,7 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 	localDir, err := os.Stat(srcDir)
 	if err != nil {
 
-		errorList.PushFront(fmt.Errorf("Unable to read local directory %s ", srcDir))
+		errorList.PushFront(fmt.Errorf("unable to read local directory %s ", srcDir))
 		return
 	}
 
@@ -619,15 +638,6 @@ func (c transport) SendDir(srcDir string, destDir string) (confirmationList *lis
 		}
 	}
 	return
-}
-
-func (c transport) handleReconnects() {
-	closed := make(chan error, 1)
-	go func() {
-		closed <- c.Session.Wait()
-	}()
-	c.log.Printf("Here %v ", closed)
-	c.log.Println("IN HERE")
 }
 
 //Close closes

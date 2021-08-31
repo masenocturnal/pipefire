@@ -57,17 +57,17 @@ func SFTPGet(conf *sftp.SftpConfig, filesToTransfer *[]sftp.TransferFiles, l *lo
 }
 
 // sftpClean cleans the repote directory
-func SFTPClean(conf *sftp.SftpConfig, l *logrus.Entry) (err error) {
+func SFTPClean(conf *sftp.SftpConfig, filesToTransfer *[]sftp.TransferFiles, l *logrus.Entry) (err error) {
 	l.Infof("Begin sftpClean: %s", conf.Sftp.Host)
 	l.Debugf("Cleaning remote dir: %s ", conf.RemoteDir)
 
 	sftp, err := sftp.NewConnection(conf.Sftp.Host, conf.Sftp, l)
 	if err != nil {
-		return
+		return err
 	}
 	defer sftp.Close()
 
-	err = sftp.CleanDir(conf.RemoteDir)
+	err = sftp.CleanDir(conf.RemoteDir, filesToTransfer)
 	if err == nil {
 		l.Infof("sftpClean Complete: Removed files from: %s ", conf.RemoteDir)
 	}

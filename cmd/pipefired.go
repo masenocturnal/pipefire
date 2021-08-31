@@ -40,7 +40,6 @@ func main() {
 }
 
 func executePipelines() {
-	// @todo shift this to the pipeline
 	hostConfig, err := config.ReadApplicationConfig()
 	if err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {

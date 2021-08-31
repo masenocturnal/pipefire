@@ -12,7 +12,7 @@ import (
 func getPrivateKeyAuthentication(keyPath string, keyPassword string) (ssh.AuthMethod, error) {
 
 	if !keyExists(keyPath) {
-		return nil, fmt.Errorf("File: %s doesn't exist ", keyPath)
+		return nil, fmt.Errorf("file: %s doesn't exist ", keyPath)
 	}
 
 	keyInBytes, err := ioutil.ReadFile(keyPath)
@@ -28,7 +28,7 @@ func getPrivateKeyAuthentication(keyPath string, keyPassword string) (ssh.AuthMe
 		signer, err = ssh.ParsePrivateKey(keyInBytes)
 	}
 	if err != nil {
-		e := fmt.Errorf("Unable to decrypt private key. You may need to supply a decryption password %s", err.Error())
+		e := fmt.Errorf("unable to decrypt private key. You may need to supply a decryption password %s", err.Error())
 		return nil, e
 	}
 	return ssh.PublicKeys(signer), err

@@ -1,20 +1,36 @@
 {
-    "messageType": [
-        "urn:message:Certegy.DirectDebit.Messaging.Contracts.Payload:BankTransferPayload"
-    ],
-    "message": {
-        "task": "begin",
-        "start_date": "",
-        "correlationId": "",
-        "files": [
-            {
-                "checksum": "6311DA8F7A01C15E73A209CBBC5D0B3A8B345477",
-                "fileName": "/Pickup/PX/sneh.txt"
-            },
-            {
-                "checksum": "6311DA8F7A01C15E73A209CBBC5D0B3A8B345477",
-                "fileName": "\\Destination_ANZ_Seller_Settlement_DD\\SPR.1000000067.csv"
-            }
-        ]
-    }
+	"messageType": [
+		"urn:message:Certegy.DirectDebit.Messaging.Contracts.Payload:BankTransferPayload"
+	],
+	"message": {
+		"task": "begin",
+		"start_date": "2021-08-27",
+		"correlationId": "00000000-0000-0000-0000-000000000000",
+		"files": [
+			{
+				"checksum": "8BE9FBA9E39307E828885A0FBBE69EF7E0A869EF",
+				"fileName": "/Pickup/PX/DD_NZ_CreditCardPX_Book_14_210811.014849.268.csv"
+			},
+			{
+				"checksum": "0FF6933E72B80980EDE056ECB6276B135D676BF8",
+				"fileName": "/Pickup/PX/DD_OZ_CreditCardPX_Book_12_210811.014849.268.csv"
+			},
+			{
+				"checksum": "3DCF2085C5C65AE581EBCAFD0EF0CACEE6E223EA",
+				"fileName": "/Pickup/PX/DD_OZ_CreditCardPX_Book_22_210811.014849.268.csv"
+			},
+			{
+				"checksum": "7A638E7CCBD02A7866F8BFB597F2CB59CCD8F55B",
+				"fileName": "/Pickup/PX/DD_OZ_CreditCardPX_Book_24_210811.014849.268.csv"
+			},
+			{
+				"checksum": "877DBF70C434B2839E1F3AA6433BF908467DE7BC",
+				"fileName": "/Pickup/GA/DD_AU_BankANZ_Book_12_210811.014849.268.csv"
+			},
+			{
+				"checksum": "AD4B07E1F4DE29051958A312A229BA4D198AC445",
+				"fileName": "/Pickup/GA/DD_NZ_BankANZ_Book_11_210811.014849.268.csv"
+			}
+		]
+	}
 }
